@@ -1,0 +1,90 @@
+# config.yml - 机器人核心配置
+# 此文件包含机器人的基本配置、服务器连接信息和其他核心设置
+
+# 日志配置
+# 可选级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_level: "INFO"
+
+# 敏感词推送配置
+# sensitive_word_target: 敏感词报告推送目标
+# 可选值: "report_group" (推送到指定群聊) 或 "out-file" (输出到文件)
+sensitive_word_target: "out-file"
+
+# 多账号WebSocket连接配置
+# mode: 容灾模式，当前支持fallback（故障转移模式）
+# 账号按priority从小到大排序，数字越小优先级越高
+# 当高优先级账号故障时，会自动切换到较低优先级账号
+# 当高优先级账号恢复正常时，会立即切换回高优先级账号
+# parallel模式下，同时启用所有账号，忽略priority配置
+mode: fallback
+accounts:
+  - # 账号ID，唯一标识符
+    id: 1
+    # 优先级，数字越小优先级越高
+    priority: 1
+    # WebSocket 连接地址
+    ws_uri: "ws://127.0.0.1:1451"
+    # WebSocket访问令牌
+    access_token: ""
+    # OneBot API基础地址
+    onebot_api_base: "http://127.0.0.1:1145"
+    # OneBot API访问令牌
+    onebot_access_token: ""
+    # 机器人 QQ 号
+    bot_qq: "3564855670"
+    # WebSocket 心跳和重连配置
+    websocket:
+      # 心跳间隔（秒），设为0则禁用心跳
+      heartbeat_interval: 1
+      # 最大重试次数
+      max_retries: 2
+      # 重试延迟基础时间（秒）
+      retry_delay_base: 5
+      # 重试延迟最大时间（秒）
+      retry_delay_max: 60
+      # 重试退避因子（指数退避算法中的底数）
+      retry_backoff_factor: 2
+
+# 管理员配置
+Root_user: "2711631445"
+
+# 反馈报告配置
+report_group: "1026058003"  # 请填入接收反馈的群聊ID
+
+# 默认API超时时间（秒）
+default_api_timeout: 120
+
+# 机器人被拉群时的提示消息
+join_group_message: "大家好！这里是TrJam机器人框架官方bot！\n使用/help查看我有哪些功能\n若要开启AI聊天，请发送/chat enable启用，/chat disable关闭。\n如有疑问或建议，发送/report 内容，迅速呈报开发者~"
+
+llm_enabled: true
+
+# AI视觉模型配置
+ai_vision:
+  api_key: ""
+  model: "THUDM/GLM-4.1V-9B-Thinking"
+  base_url: "https://api.siliconflow.cn/v1/chat/completions"
+  # 超时设置（秒）
+  timeout:
+    total: 120  # 总超时时间
+    connect: 10  # 连接超时时间
+  # 腿照识别功能配置
+  leg_photo_detection:
+    enabled: true  # 是否启用腿照识别功能
+    max_images_per_message: 3  # 每条消息最多处理的图片数量
+    threshold: 0.8  # 置信度阈值 (0-1)
+
+# AI语言模型配置
+ai_language:
+  api_key: ""
+  model: "deepseek-chat"
+  base_url: "https://api.deepseek.com/chat/completions"
+  # 超时设置（秒）
+  timeout:
+    total: 120  # 总超时时间
+    connect: 10  # 连接超时时间
+
+# MaiBot适配器配置
+maibot_adapter:
+  # HTTP API基础地址
+  api_base_url: "http://localhost:1145/api"
