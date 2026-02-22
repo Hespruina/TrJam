@@ -1,0 +1,17 @@
+aiofiles
+aiohttp
+aiosqlite
+beautifulsoup4
+colorama
+Hyper
+httpx
+jinja2
+mcstatus
+opencc
+pillow
+playwright
+psutil
+pyyaml
+requests
+tomlkit
+websockets

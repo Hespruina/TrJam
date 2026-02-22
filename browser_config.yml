@@ -1,0 +1,9 @@
+fallback_to_builtin: true
+headless: true
+performance_optimization:
+  dev_shm_usage: false
+  disable_extensions: true
+  disable_gpu: true
+  memory_limit_mb: 512
+preferred_browser: msedge
+use_system_browser: true

@@ -1,0 +1,388 @@
+# commands.yml - 命令配置
+# 此文件包含所有指令配置，用于权限控制、帮助信息显示等
+
+# 消息黑名单配置
+# 当消息有且只有符合黑名单的内容时，即使是命令也不回复
+# 用于过滤QQ的超级表情功能
+blacklist_msg:
+  - '/大怨种'
+
+# 命令配置
+commands:
+  ask:
+    permission: User
+    description: 答案之书，回答你的问题
+    usage: "/ask <问题内容>"
+    category: 通用
+    global_available: true
+    module: commands.ask_command
+    function: handle_ask_command
+  
+  bancommand:
+    permission: Admin
+    description: 添加或移除被禁用的命令
+    usage: "/bancommand add/rm 命令"
+    category: 权限管理
+    global_available: true
+    module: commands.bancommand_command
+    function: handle_bancommand_command
+
+  help:
+    permission: User
+    description: 显示帮助信息
+    usage: "/help"
+    category: 通用
+    global_available: true
+    module: commands.help_command
+    function: handle_help_command
+
+  restart:
+    permission: Root
+    description: 重启机器人
+    usage: "/restart"
+    category: 系统管理
+    global_available: true
+    module: commands.restart_command
+    function: handle_restart_command
+
+  pms:
+    permission: Admin
+    description: 管理群组成员管理权限
+    usage: "/pms <add/remove/list> <QQ号或@>"
+    category: 权限管理
+    global_available: true
+    module: commands.pms_command
+    function: handle_pms_command
+  
+  debug:
+    permission: Root
+    description: 调试API调用，仅限Root用户使用
+    usage: "/debug api onebot - 开始调试onebot API调用\n/debug input <参数> - 输入调试参数" 
+    category: 系统调试
+    global_available: true
+    module: commands.debug_command
+    function: handle_debug_command
+
+  fakemsg:
+    permission: Admin
+    description: 构建和发送伪造的群聊转发消息
+    usage: "/fakemsg\n/fakemsg/\n<用户ID>\n<昵称>\n<消息内容>\n/fakemsg/\n..." 
+    category: 系统调试
+    global_available: true
+    module: commands.fakemsg_command
+    function: handle_fakemsg_command
+
+  qqinfo:
+    permission: User
+    description: 查看指定QQ用户的公开信息
+    usage: "/qqinfo <@用户 或 QQ号>"
+    category: 信息查询
+    global_available: true
+    module: commands.qqinfo_command
+    function: handle_qqinfo_command
+
+  mute:
+    permission: Admin
+    description: 禁言群成员
+    usage: "/mute @用户或QQ号 [时长]"
+    category: 群管理
+    global_available: true
+    module: commands.mute_command
+    function: handle_mute_command
+
+  unmute:
+    permission: Admin
+    description: 解除群成员禁言
+    usage: "/unmute @用户或QQ号"
+    category: 群管理
+    global_available: true
+    module: commands.mute_command
+    function: handle_mute_command
+
+  kick:
+    permission: Admin
+    description: 踢出群成员
+    usage: "/kick @用户或QQ号"
+    category: 群管理
+    global_available: true
+    module: commands.mute_command
+    function: handle_mute_command
+
+  softmute:
+    permission: Admin
+    description: 软禁言用户（自动撤回消息）
+    usage: "/softmute [mute/unmute] @用户或QQ号 - 不指定mute/unmute时自动切换状态"
+    category: 群管理
+    global_available: true
+    chinese_names: ['软禁']
+    module: commands.softmute_command
+    function: handle_softmute_command
+
+  allquote:
+    permission: Admin
+    description: 句句名言（自动为用户消息生成名言图片）
+    usage: "/allquote @用户或QQ号 - 切换用户的句句名言状态"
+    category: 群管理
+    global_available: true
+    chinese_names: ['句句名言', '全名言', '始终名言']
+    module: commands.allquote_command
+    function: handle_allquote_command
+
+  random:
+    permission: Admin
+    description: 随机操作功能
+    usage: "/random mute - 随机禁言一个普通群成员10秒"
+    category: 群管理
+    global_available: true
+    module: commands.random_command
+    function: handle_random_command
+
+  report:
+    permission: User
+    description: 举报问题
+    usage: "/report <问题描述>"
+    category: 通用
+    module: commands.report_command
+    function: handle_report_command
+
+  mbti-love:
+    permission: User
+    description: MBTI恋爱性格测试
+    usage: "/mbti-love - 开始MBTI恋爱性格测试"
+    category: 娱乐
+    global_available: true
+    module: commands.mbti_love_command
+    function: handle_mbti_love_command
+
+  like:
+    permission: User
+    description: 为自己的QQ名片点赞
+    usage: "/like 或 '赞我'"
+    category: 通用
+    global_available: true
+    chinese_names: ['赞我', '超我']
+    module: commands.like_command
+    function: handle_like_command
+
+  bad:
+    permission: Root
+    description: 私聊敏感词相关功能（仅Root用户私聊可用）
+    usage: "/bad"
+    category: 系统管理
+    module: commands.bad_command
+    function: handle_bad_command
+
+  jrys:
+    permission: User
+    description: 查询今日运势
+    usage: "/jrys - 查询今日运势"
+    category: 通用
+    global_available: true
+    chinese_names: ['今日运势', '今日人品']
+    module: commands.jrys_command
+    function: handle_jrys_command
+
+  # 原特殊功能整合到命令配置
+  quote:
+    permission: User
+    description: 生成名言图片
+    usage: "/quote 或 名言（回复一条消息并发送'名言'）"
+    category: 通用
+    global_available: true
+    chinese_names: ['名言', '图片']
+    module: commands.quote_command
+    function: handle_quote_command
+    need_trust: true
+  
+  expr:
+    permission: User
+    description: 查询快递信息
+    usage: "/expr <快递单号> 或 查快递 <快递单号> 或 /expr mind <快递单号>（添加提醒）"
+    category: 信息查询
+    global_available: true
+    chinese_names: ['查快递', '快递', '单号', '快递单号']
+    module: commands.expr_command
+    function: handle_expr_command
+
+  music:
+    permission: User
+    description: 搜索和播放音乐
+    usage: "/music <歌名> - 搜索音乐\n/music <编号> - 选择播放音乐"
+    category: 通用
+    global_available: true
+    module: commands.music_command
+    function: handle_music_command
+
+  muteme:
+    permission: User
+    description: 主动请求禁言并在10秒后自动解除
+    usage: "/muteme"
+    category: 娱乐
+    global_available: true
+    chinese_names: ['禁言我', '禁我', '塞我口球']
+    module: commands.muteme_command
+    function: handle_muteme_command
+
+  recall:
+    permission: User
+    description: 撤回消息
+    usage: "/recall 或 撤/撤回（回复一条消息并发送'撤'或'撤回'）"
+    category: 群管理
+    global_available: true
+    chinese_names: ['撤回', '撤']
+    module: commands.recall_command
+    function: handle_recall
+
+  toggle:
+    permission: Admin
+    description: 查看和管理扩展功能列表
+    usage: "/toggle - 查看可用功能列表\n/toggle enable/disable <功能名称> - 开启/关闭功能"
+    category: 群管理
+    global_available: true
+    chinese_names: ['功能开关', '功能']
+    module: commands.toggle_command
+    function: handle_toggle_command
+  
+  group:
+    permission: Admin
+    description: 群组相关设置
+    usage: "/group join set [level/answer] [值] - 设置自动审批条件\n/group join list - 查看自动审批条件\n/group join rm [编号] - 删除自动审批条件\n/group join welcome [消息内容] - 设置欢迎消息"
+    category: 群管理
+    global_available: true
+    module: commands.group_command
+    function: handle_group_command
+
+  trust:
+    permission: Root
+    description: 管理信任群组列表
+    usage: "/trust add/rm <群号> - 添加/移除信任群组"
+    category: 系统管理
+    global_available: true
+    module: commands.trust_command
+    function: handle_trust_command
+
+  rua:
+    permission: User
+    description: 生成摸头动图
+    usage: "/rua或'摸头''摸' [@用户 或 QQ号]（不指定则摸自己）"
+    category: 通用
+    global_available: true
+    chinese_names: ['摸头', '摸']
+    module: commands.rua_command
+    function: handle_rua_command
+  
+  poke:
+    permission: User
+    description: 戳一戳指定用户
+    usage: "/poke <@用户 或 QQ号> [次数]（普通用户最多10次，管理员无限制）"
+    category: 通用
+    global_available: true
+    chinese_names: ['戳', '戳戳']
+    module: commands.poke_command
+    function: handle_poke_command
+
+  whoami:
+    permission: User
+    description: 查询自己的权限级别
+    usage: "/whoami"
+    category: 权限管理
+    global_available: true
+    module: commands.whoami_command
+    function: handle_whoami_command
+
+
+  emoji:
+    permission: User
+    description: 给指定消息添加表情回应
+    usage: "回复一条消息并发送 /emoji [次数]（普通用户最多5次，管理员最多12次，Root无限制）"
+    category: 通用
+    global_available: true
+    chinese_names: ['表情']
+    module: commands.emoji_command
+    function: handle_emoji_command
+
+  ess:
+    permission: Admin
+    description: 设置精华消息
+    usage: "回复一条消息并发送 /ess"
+    category: 群管理
+    global_available: true
+    chinese_names: ['设精', '设', '精华']
+    module: commands.essence_command
+    function: handle_essence_command
+
+  
+  chat:
+    permission: User
+    description: 管理AI聊天状态
+    usage: "/chat enable - 将当前群加入白名单\n/chat disable - 将当前群移除白名单"
+    category: 通用
+    global_available: true
+    module: commands.chat_command
+    function: chat_command
+  
+  bapic:
+    permission: User
+    description: 随机发送一张蔚蓝档案图图
+    usage: "/bapic - 随机发送一张蔚蓝档案图图"
+    category: 通用
+    global_available: true
+    chinese_names: ['图图']
+    module: commands.bapic_command
+    function: handle_bapic_command
+
+  plugin:
+    permission: Root
+    description: 管理插件系统
+    usage: "/plugin list - 列出所有插件及其状态\n/plugin load <插件名称> - 加载指定插件\n/plugin unload <插件名称> - 卸载指定插件\n/plugin reload <插件名称> - 重载指定插件\n/plugin enable <插件名称> - 启用指定插件\n/plugin disable <插件名称> - 禁用指定插件"
+    category: 系统管理
+    global_available: true
+    module: commands.plugin_command
+    function: handle_plugin_command
+  
+  sub:
+    permission: Root
+    description: 管理子机器人系统
+    usage: "/sub list - 列出所有子机器人及其状态\n/sub load <子机器人名称> - 加载指定子机器人\n/sub unload <子机器人名称> - 卸载指定子机器人\n/sub reload <子机器人名称> - 重载指定子机器人"
+    category: 系统管理
+    global_available: true
+    module: commands.sub_command
+    function: handle_sub_command
+  
+# 命令分类配置
+command_categories:
+  信息查询:
+    name: 信息查询
+    emoji: "🔍"
+
+  玩家管理:
+    name: 玩家管理
+    emoji: "👤"
+
+  消息广播:
+    name: 消息广播
+    emoji: "📢"
+
+  服务器管理:
+    name: 服务器管理
+    emoji: "⚙️"
+
+  系统管理:
+    name: 系统管理
+    emoji: "🔧"
+
+  权限管理:
+    name: 权限管理
+    emoji: "🔑"
+
+  通用:
+    name: 通用
+    emoji: "ℹ️"
+
+  群管理:
+    name: 群管理功能
+    emoji: "👥"
+
+  系统调试:
+    name: 系统调试
+    emoji: "🐞"
