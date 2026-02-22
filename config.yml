@@ -55,7 +55,7 @@ report_group: "1026058003"  # 请填入接收反馈的群聊ID
 default_api_timeout: 120
 
 # 机器人被拉群时的提示消息
-join_group_message: "大家好！这里是TrJam机器人框架官方bot！\n使用/help查看我有哪些功能\n若要开启AI聊天，请发送/chat enable启用，/chat disable关闭。\n如有疑问或建议，发送/report 内容，迅速呈报开发者~"
+join_group_message: "大家好！这里是TrJam机器人框架bot！\n使用/help查看我有哪些功能\n若要开启AI聊天，请发送/chat enable启用，/chat disable关闭。\n如有疑问或建议，发送/report 内容，迅速呈报开发者~"
 
 llm_enabled: true
 
