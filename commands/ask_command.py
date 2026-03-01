@@ -43,7 +43,7 @@ HTML_TEMPLATE = '''
             height: 900px;
             background: linear-gradient(135deg, #1a0633, #2d0b5e, #4b0082);
             color: #e6d7ff;
-            font-family: 'HarmonyOS Sans SC', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei', 'Microsoft YaHei', sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
