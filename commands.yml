@@ -352,7 +352,7 @@ commands:
   account:
     permission: Admin
     description: 管理多账号系统
-    usage: "/account list - 查看所有账号状态\n/account mode - 查看当前运行模式\n/account mode parallel|fallback - 切换运行模式"
+    usage: "/account list - 查看所有账号状态\n/account list groups - 查看群列表缓存\n/account mode - 查看当前运行模式\n/account mode parallel|parallel-pro|fallback - 切换运行模式"
     category: 系统管理
     global_available: true
     module: commands.account_command

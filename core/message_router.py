@@ -107,11 +107,11 @@ class MessageRouter:
                     raw_message = event.get('raw_message', '')
                     message_id = event.get('message_id', 'unknown')
                     
-                    # 检查是否应该处理该消息
-                    if not self.context.should_handle_message(event):
+                    # 检查是否应该处理该消息（Parallel Pro 模式需要传递 account_id）
+                    if not self.context.should_handle_message(event, account_id=account_id):
                         continue
                     
-                    # 在事件中添加账号ID信息，供后续处理使用
+                    # 在事件中添加账号 ID 信息，供后续处理使用
                     if account_id is not None:
                         event['_account_id'] = account_id
                     
@@ -197,10 +197,10 @@ class MessageRouter:
                         
                         await group_handler.handle_group_message(self.context, event)
                 elif post_type == 'request':
-                    # 检查是否应该处理该消息
-                    if not self.context.should_handle_message(event):
+                    # 检查是否应该处理该消息（Parallel Pro 模式需要传递 account_id）
+                    if not self.context.should_handle_message(event, account_id=account_id):
                         continue
-                    # 在事件中添加账号ID信息
+                    # 在事件中添加账号 ID 信息
                     if account_id is not None:
                         event['_account_id'] = account_id
                     # 分发事件到插件
@@ -208,10 +208,10 @@ class MessageRouter:
                         await self.plugin_manager.dispatch_event(post_type, event)
                     await request_handler.handle_request_event(self.context, event)
                 elif post_type == 'notice':
-                    # 检查是否应该处理该消息
-                    if not self.context.should_handle_message(event):
+                    # 检查是否应该处理该消息（Parallel Pro 模式需要传递 account_id）
+                    if not self.context.should_handle_message(event, account_id=account_id):
                         continue
-                    # 在事件中添加账号ID信息
+                    # 在事件中添加账号 ID 信息
                     if account_id is not None:
                         event['_account_id'] = account_id
                     # 分发事件到插件

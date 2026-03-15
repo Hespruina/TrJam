@@ -484,6 +484,148 @@ class MultiWebSocketManager:
         """检查是否为并行模式"""
         return self.mode == 'parallel'
 
+    async def _update_group_list_loop(self):
+        """Parallel Pro 模式下定时更新群列表"""
+        logger.info("启动群列表更新循环")
+        
+        # 首次运行前等待一段时间，确保所有连接都已建立
+        await asyncio.sleep(10)
+        
+        while self._is_running:
+            try:
+                await self._fetch_all_group_lists()
+                # 每5分钟更新一次
+                await asyncio.sleep(300)
+            except Exception as e:
+                logger.error(f"群列表更新循环发生异常: {e}", exc_info=True)
+                await asyncio.sleep(60)  # 发生异常时1分钟后重试
+    
+    async def _fetch_all_group_lists(self):
+        """获取所有账号的群列表"""
+        from utils.api_utils import call_onebot_api
+        
+        logger.debug("开始获取所有账号的群列表")
+        
+        success_count = 0
+        for account_id, conn in self.connections.items():
+            if not conn.is_connected:
+                logger.warning(f"账号 {account_id} 未连接，跳过群列表获取")
+                continue
+            
+            if not conn.is_healthy:
+                logger.warning(f"账号 {account_id} 不健康，但仍尝试获取群列表")
+            
+            try:
+                result = await call_onebot_api(
+                    context=self.context,
+                    action='get_group_list',
+                    params={},
+                    account_id=account_id
+                )
+                
+                if result and result.get('success'):
+                    data = result.get('data', {})
+                    if data.get('status') == 'ok' and 'data' in data:
+                        group_list = data['data']
+                        self._group_list_cache[account_id] = group_list
+                        logger.debug(f"账号 {account_id} 获取到 {len(group_list)} 个群")
+                        success_count += 1
+                    else:
+                        logger.warning(f"账号 {account_id} 获取群列表失败：{data}")
+                else:
+                    logger.warning(f"账号 {account_id} 获取群列表失败：{result}")
+                    
+            except Exception as e:
+                logger.error(f"获取账号 {account_id} 群列表时发生异常：{e}")
+        
+        # 更新群 - 账号映射
+        self._update_group_accounts_map()
+        
+        # 统计总连接数和成功获取群列表的账号数
+        total_connected = sum(1 for conn in self.connections.values() if conn.is_connected)
+        logger.info(f"群列表更新完成，缓存了 {success_count}/{total_connected} 个已连接账号的群列表")
+        
+        # 如果有账号未成功获取群列表，记录警告
+        if success_count < total_connected:
+            logger.warning(f"有 {total_connected - success_count} 个已连接账号未能获取群列表，优先级判断可能不准确")
+    
+    def _update_group_accounts_map(self):
+        """更新群-账号映射关系"""
+        self._group_accounts_map.clear()
+        
+        for account_id, group_list in self._group_list_cache.items():
+            for group in group_list:
+                group_id = str(group.get('group_id'))
+                if group_id not in self._group_accounts_map:
+                    self._group_accounts_map[group_id] = []
+                self._group_accounts_map[group_id].append(account_id)
+        
+        # 统计有多个账号的群
+        multi_account_groups = [
+            (gid, accounts) for gid, accounts in self._group_accounts_map.items()
+            if len(accounts) > 1
+        ]
+        
+        if multi_account_groups:
+            logger.info(f"发现 {len(multi_account_groups)} 个群有多个账号共存")
+            for gid, accounts in multi_account_groups[:5]:  # 只显示前5个
+                logger.debug(f"群 {gid}: 账号 {accounts}")
+    
+    def get_accounts_in_group(self, group_id: str) -> List[int]:
+        """获取指定群中的所有账号ID列表"""
+        return self._group_accounts_map.get(str(group_id), [])
+    
+    def is_highest_priority_in_group(self, account_id: int, group_id: str) -> bool:
+        """检查指定账号是否是该群中优先级最高的活跃账号
+        
+        Args:
+            account_id: 要检查的账号 ID
+            group_id: 群 ID
+            
+        Returns:
+            True 如果该账号是该群最高优先级的活跃账号，否则 False
+        """
+        accounts_in_group = self.get_accounts_in_group(group_id)
+        
+        # 如果该群只有一个账号或没有缓存信息，直接返回 True
+        if len(accounts_in_group) <= 1:
+            logger.debug(f"群 {group_id} 只有 {len(accounts_in_group)} 个账号缓存，允许处理")
+            return True
+        
+        # 获取当前账号的优先级
+        current_conn = self.connections.get(account_id)
+        if not current_conn:
+            logger.warning(f"账号 {account_id} 的连接信息不存在")
+            return False
+        
+        # 如果当前账号未连接或不健康，不应该处理消息
+        if not current_conn.is_connected or not current_conn.is_healthy:
+            logger.debug(f"账号 {account_id} 未连接或不健康，不应该处理消息")
+            return False
+        
+        current_priority = current_conn.priority
+        
+        # 检查是否有其他更高优先级的活跃账号
+        for other_account_id in accounts_in_group:
+            if other_account_id == account_id:
+                continue
+            
+            other_conn = self.connections.get(other_account_id)
+            if not other_conn:
+                continue
+            
+            # 如果其他账号优先级更高且活跃，返回 False
+            if other_conn.priority < current_priority and other_conn.is_connected and other_conn.is_healthy:
+                logger.debug(f"账号 {account_id} 在群 {group_id} 中有更高优先级的账号 {other_account_id} (优先级：{other_conn.priority} < {current_priority})")
+                return False
+        
+        logger.debug(f"账号 {account_id} 是群 {group_id} 中最高优先级的活跃账号 (优先级：{current_priority})")
+        return True
+    
+    def is_parallel_pro_mode(self) -> bool:
+        """检查是否为 Parallel Pro 模式"""
+        return self.mode == 'parallel-pro'
+
     def stop(self):
         """停止主循环。"""
         logger.debug("MultiWebSocketManager停止主循环")

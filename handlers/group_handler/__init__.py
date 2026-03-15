@@ -35,12 +35,12 @@ logger = get_logger("GroupHandler")
 
 async def handle_group_message(context: BotContext, event: dict):
     """处理群聊消息事件。"""
-    # 检查是否应该处理该消息（基于当前活跃账号）
-    if not context.should_handle_message(event):
-        return
-    
     # 获取账号ID（parallel模式下使用）
     account_id = event.get('_account_id')
+    
+    # 检查是否应该处理该消息（基于当前活跃账号和parallel-pro模式的优先级）
+    if not context.should_handle_message(event, account_id):
+        return
     
     # 设置当前账号ID到上下文变量，供后续消息发送使用
     if account_id is not None:

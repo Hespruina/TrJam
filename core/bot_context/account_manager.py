@@ -60,6 +60,15 @@ class AccountManager:
     def is_parallel_mode(self) -> bool:
         """检查是否为并行模式"""
         return self._config.get('mode', 'fallback') == 'parallel'
+    
+    def is_parallel_pro_mode(self) -> bool:
+        """检查是否为 Parallel Pro 模式"""
+        return self._config.get('mode', 'fallback') == 'parallel-pro'
+    
+    def is_any_parallel_mode(self) -> bool:
+        """检查是否为任意并行模式（parallel 或 parallel-pro）"""
+        mode = self._config.get('mode', 'fallback')
+        return mode in ('parallel', 'parallel-pro')
 
     async def set_active_account(self, account_info: Dict[str, Any]):
         """设置当前活跃账号信息。"""
@@ -80,16 +89,46 @@ class AccountManager:
         
         return self._config.get(key, default)
 
-    def should_handle_message(self, event: dict, account_id: int = None) -> bool:
+    def should_handle_message(self, event: dict, account_id: int = None, context=None) -> bool:
         """检查是否应该处理该消息
         
         Args:
             event: 事件数据
             account_id: 消息来源账号ID（parallel模式下使用）
+            context: BotContext对象（parallel-pro模式下需要）
         """
         # 对于非消息类型的事件，总是处理
         post_type = event.get('post_type')
         if post_type not in ['message', 'notice', 'request']:
+            return True
+        
+        # Parallel Pro 模式下，需要检查优先级
+        if self.is_parallel_pro_mode():
+            if account_id is None:
+                logger.debug("Parallel Pro 模式: 无法获取账号ID，忽略消息")
+                return False
+            
+            # 只处理群消息的优先级判断
+            if post_type == 'message' and event.get('message_type') == 'group':
+                group_id = event.get('group_id')
+                if group_id and context and hasattr(context, 'multi_ws_manager'):
+                    ws_manager = context.multi_ws_manager
+                    if hasattr(ws_manager, 'is_highest_priority_in_group'):
+                        # 检查群列表是否已缓存
+                        accounts_in_group = ws_manager.get_accounts_in_group(str(group_id))
+                        if not accounts_in_group:
+                            # 群列表未缓存或该群不在缓存中，允许处理并记录警告
+                            logger.warning(f"Parallel Pro 模式：群 {group_id} 的群列表未缓存，允许账号 {account_id} 处理消息")
+                            return True
+                        
+                        is_highest = ws_manager.is_highest_priority_in_group(account_id, str(group_id))
+                        if not is_highest:
+                            logger.debug(f"Parallel Pro 模式：账号 {account_id} 在群 {group_id} 中有更高优先级的活跃账号，忽略消息")
+                            return False
+                        else:
+                            logger.debug(f"Parallel Pro 模式：账号 {account_id} 是群 {group_id} 中最高优先级的活跃账号，处理消息")
+            
+            # 其他消息类型或无法判断时，允许处理
             return True
         
         # Parallel 模式下，处理所有来自已知账号的消息

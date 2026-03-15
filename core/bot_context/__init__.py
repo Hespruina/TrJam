@@ -51,9 +51,12 @@ class BotContext:
         """安全地获取配置值。"""
         return self._account_manager.get_config_value(key, default)
 
-    def should_handle_message(self, event: dict) -> bool:
-        """检查是否应该处理该消息（基于当前活跃账号）"""
-        return self._account_manager.should_handle_message(event)
+    def should_handle_message(self, event: dict, account_id: int = None) -> bool:
+        """检查是否应该处理该消息（基于当前活跃账号）
+        
+        :param account_id: 消息来源账号ID（parallel-pro模式下用于优先级判断）
+        """
+        return self._account_manager.should_handle_message(event, account_id, self)
     
     def is_parallel_mode(self) -> bool:
         """检查是否为并行模式"""
