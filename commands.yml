@@ -349,6 +349,15 @@ commands:
     module: commands.sub_command
     function: handle_sub_command
   
+  account:
+    permission: Admin
+    description: 管理多账号系统
+    usage: "/account list - 查看所有账号状态\n/account mode - 查看当前运行模式\n/account mode parallel|fallback - 切换运行模式"
+    category: 系统管理
+    global_available: true
+    module: commands.account_command
+    function: handle_account_command
+  
 # 命令分类配置
 command_categories:
   信息查询:

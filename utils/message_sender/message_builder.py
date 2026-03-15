@@ -6,6 +6,7 @@ import asyncio
 from typing import Optional, Dict, Any, Callable, List
 from logger_config import get_logger
 from core.bot_context import BotContext
+from core.current_account import get_current_account_id
 from utils.api_utils import call_onebot_api
 
 logger = get_logger("MessageBuilder")
@@ -13,12 +14,21 @@ logger = get_logger("MessageBuilder")
 class MessageBuilder:
     """消息构建器，提供链式调用接口来构建复杂消息"""
     
-    def __init__(self, context: BotContext):
+    def __init__(self, context: BotContext, account_id: int = None):
         self.context = context
         self.group_id: Optional[str] = None
         self.user_id: Optional[str] = None
         self.message_segments: List[Dict[str, Any]] = []
         self.callback: Optional[Callable] = None
+        
+        # 账号ID（parallel模式下使用）
+        # 如果未指定，尝试从上下文变量获取
+        if account_id is not None:
+            self.account_id: Optional[int] = account_id
+        else:
+            self.account_id = get_current_account_id()
+            if self.account_id is not None:
+                logger.debug(f"MessageBuilder 从上下文获取到账号ID: {self.account_id}")
         
         # 添加敏感词检测绕过相关属性
         self.badword_bypass = False  # 是否绕过敏感词检测
@@ -99,6 +109,15 @@ class MessageBuilder:
         """获取构建好的消息段列表"""
         return self.message_segments
     
+    def set_account_id(self, account_id: int) -> 'MessageBuilder':
+        """设置账号ID（parallel模式下使用）
+        
+        Args:
+            account_id: 账号ID，用于指定使用哪个账号发送消息
+        """
+        self.account_id = account_id
+        return self
+    
     async def send(self) -> Optional[str]:
         """直接发送构建好的消息"""
         if not self.group_id:
@@ -124,7 +143,8 @@ class MessageBuilder:
                         recall_result = await call_onebot_api(
                             context=self.context,
                             action="delete_msg",
-                            params={"message_id": message_id}
+                            params={"message_id": message_id},
+                            account_id=self.account_id
                         )
                         if recall_result and recall_result.get("success"):
                             logger.info(f"成功撤回消息 {message_id}")
@@ -149,7 +169,8 @@ class MessageBuilder:
             echo = await self.context.send_group_message(
                 str(self.group_id),
                 self.message_segments,
-                enhanced_callback
+                enhanced_callback,
+                self.account_id
             )
             
             logger.debug(f"消息发送成功，echo: {echo}")

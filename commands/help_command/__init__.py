@@ -18,6 +18,7 @@ async def handle_help_command(context: BotContext, **kwargs) -> CommandResponse:
     server_name = kwargs.get('server_name')
     group_id_str = str(group_id) if group_id else None
     sender_role = kwargs.get('sender_role')
+    account_id = kwargs.get('account_id')  # parallel模式下使用
     
     # 检查是否为已配置群聊
     is_configured = False
@@ -25,7 +26,7 @@ async def handle_help_command(context: BotContext, **kwargs) -> CommandResponse:
         is_configured = True
     
     # 发送处理中提示
-    processing_builder = MessageBuilder(context)
+    processing_builder = MessageBuilder(context, account_id)
     processing_builder.set_group_id(group_id)
     processing_builder.set_user_id(user_id)
     processing_builder.add_at()
@@ -35,7 +36,7 @@ async def handle_help_command(context: BotContext, **kwargs) -> CommandResponse:
         if message_id:
             # 启动后台任务处理帮助请求，并传递处理中消息的ID
             create_monitored_task(
-                process_help_request(context, user_id, group_id, server_name, group_id_str, message_id, sender_role),
+                process_help_request(context, user_id, group_id, server_name, group_id_str, message_id, sender_role, account_id),
                 name=f"HelpCommand_process_{user_id}_{group_id}"
             )
     

@@ -62,36 +62,30 @@ class MessageRouter:
                 event = json.loads(msg.data)
                 logger.debug(f"收到WebSocket文本消息，事件类型: {event.get('post_type')}")
                 
-                # 检查消息是否来自当前活跃账号
+                # 获取当前连接对应的账号ID
+                account_id = None
                 if hasattr(ws, '_account_id'):
                     account_id = ws._account_id
+                
+                # 检查是否为 Parallel 模式
+                is_parallel = False
+                if hasattr(self.context, 'multi_ws_manager'):
+                    multi_ws_manager = self.context.multi_ws_manager
+                    is_parallel = multi_ws_manager.is_parallel_mode()
                     
-                    # 检查该账号是否是当前活跃账号
-                    if hasattr(self.context, 'multi_ws_manager'):
-                        multi_ws_manager = self.context.multi_ws_manager
+                    if is_parallel:
+                        # Parallel 模式下，处理所有来自已知账号的消息
+                        logger.debug(f"Parallel 模式: 处理账号 {account_id} 的消息")
+                        # 转发消息给子机器人
+                        await self.forward_message_to_subbots(msg.data)
+                    else:
+                        # Fallback 模式下，只处理活跃账号的消息
                         if hasattr(multi_ws_manager, 'active_connection_id'):
                             active_conn_id = multi_ws_manager.active_connection_id
-                            
-                            # 只有当消息来自当前活跃账号时，才将其转发给子机器人
                             if account_id == active_conn_id:
-                                # 转发消息给所有子机器人
                                 await self.forward_message_to_subbots(msg.data)
                             else:
                                 logger.debug(f"忽略非活跃账号 {account_id} 的消息")
-                        else:
-                            logger.error("无法获取多WebSocket管理器的活跃连接ID")
-                    else:
-                        logger.error("上下文中没有多WebSocket管理器")
-                else:
-                    logger.debug("无法获取消息所属的账号ID")
-
-                # 获取当前连接对应的账号ID
-                # 从WebSocket连接中获取账号信息
-                # 注意：这里需要根据实际情况调整，可能需要从上下文中获取
-                account_id = None
-                # 假设ws对象有一个额外的属性来存储账号ID
-                if hasattr(ws, '_account_id'):
-                    account_id = ws._account_id
                 
                 # 处理API回调
                 post_type = event.get('post_type')
@@ -112,6 +106,14 @@ class MessageRouter:
                     user_id = event.get('user_id', 'unknown')
                     raw_message = event.get('raw_message', '')
                     message_id = event.get('message_id', 'unknown')
+                    
+                    # 检查是否应该处理该消息
+                    if not self.context.should_handle_message(event):
+                        continue
+                    
+                    # 在事件中添加账号ID信息，供后续处理使用
+                    if account_id is not None:
+                        event['_account_id'] = account_id
                     
                     # 分发事件到插件（在处理器之前）
                     if self.plugin_manager:
@@ -163,7 +165,7 @@ class MessageRouter:
                         if str(user_id) != str(self.context.get_config_value("Root_user", "")) and is_user_softmuted(group_id, user_id):
                             logger.info(f"检测到软禁言用户 {user_id} 在群 {group_id} 发送消息，尝试撤回")
                             try:
-                                recall_result = await call_onebot_api(self.context, 'delete_msg', {'message_id': message_id})
+                                recall_result = await call_onebot_api(self.context, 'delete_msg', {'message_id': message_id}, account_id=account_id)
                                 # 检查API调用是否成功以及业务处理是否成功
                                 if recall_result and recall_result.get('success') and recall_result.get('data', {}).get('status') == 'ok':
                                     logger.info(f"成功撤回软禁言用户 {user_id} 的消息")
@@ -195,16 +197,31 @@ class MessageRouter:
                         
                         await group_handler.handle_group_message(self.context, event)
                 elif post_type == 'request':
+                    # 检查是否应该处理该消息
+                    if not self.context.should_handle_message(event):
+                        continue
+                    # 在事件中添加账号ID信息
+                    if account_id is not None:
+                        event['_account_id'] = account_id
                     # 分发事件到插件
                     if self.plugin_manager:
                         await self.plugin_manager.dispatch_event(post_type, event)
                     await request_handler.handle_request_event(self.context, event)
                 elif post_type == 'notice':
+                    # 检查是否应该处理该消息
+                    if not self.context.should_handle_message(event):
+                        continue
+                    # 在事件中添加账号ID信息
+                    if account_id is not None:
+                        event['_account_id'] = account_id
                     # 分发事件到插件
                     if self.plugin_manager:
                         await self.plugin_manager.dispatch_event(post_type, event)
                     await notice_handler.handle_notice_event(self.context, event)
                 elif post_type == 'meta_event':
+                    # 在事件中添加账号ID信息
+                    if account_id is not None:
+                        event['_account_id'] = account_id
                     # 分发事件到插件
                     if self.plugin_manager:
                         await self.plugin_manager.dispatch_event(post_type, event)
@@ -238,8 +255,14 @@ class MessageRouter:
         """处理HTTP请求。"""
         return await process_http_request(self.context, request)
 
-    async def call_api(self, action: str, params: dict) -> dict:
-        """调用OneBot API并返回结果"""
+    async def call_api(self, action: str, params: dict, account_id: int = None) -> dict:
+        """调用OneBot API并返回结果
+        
+        Args:
+            action: API动作
+            params: 参数
+            account_id: 指定账号ID（parallel模式下使用），None则使用当前活跃账号
+        """
         echo = str(uuid.uuid4())
         payload = {
             "action": action,
@@ -252,9 +275,24 @@ class MessageRouter:
         self.api_callbacks[echo] = future
         
         try:
+            # 确定使用哪个WebSocket连接
+            websocket = None
+            if account_id is not None and hasattr(self.context, 'multi_ws_manager'):
+                # Parallel 模式下使用指定账号的连接
+                conn = self.context.multi_ws_manager.get_connection_by_id(account_id)
+                if conn and conn.websocket and not conn.websocket.closed:
+                    websocket = conn.websocket
+                    logger.debug(f"使用账号 {account_id} 的连接发送API请求")
+            
+            # 如果没有指定账号或指定账号不可用，使用默认连接
+            if websocket is None:
+                websocket = self.context.websocket
+                if account_id is not None:
+                    logger.warning(f"账号 {account_id} 的连接不可用，使用默认连接")
+            
             # 发送API请求
-            if self.context.websocket and not self.context.websocket.closed:
-                await self.context.websocket.send_json(payload)
+            if websocket and not websocket.closed:
+                await websocket.send_json(payload)
                 # 等待回调结果，设置超时时间
                 result = await asyncio.wait_for(future, timeout=30.0)
                 return result

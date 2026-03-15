@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any, Callable, List, Union
 from logger_config import get_logger, log_exception
 from core.bot_context import BotContext
 from core.sensitive_word_manager import is_sensitive, log_sensitive_trigger
+from core.current_account import get_current_account_id
 
 from utils.message_sender.message_builder import MessageBuilder
 from utils.message_sender.command_response import CommandResponse
@@ -116,8 +117,13 @@ async def send_private_message(
     if badword_bypass:
         logger.info(f"消息发送成功(敏感词绕过高阶): 用户{user_id}, 原因:{bypass_reason}, 请求用户:{bypass_request_user}")
     
+    # 获取当前账号ID（parallel模式下使用）
+    account_id = get_current_account_id()
+    if account_id is not None:
+        logger.debug(f"使用账号 {account_id} 发送私聊消息")
+    
     # 使用context的方法发送私聊消息，在parallel模式下会自动选择合适的账号
-    return await context.send_private_message(user_id, message_segments, callback)
+    return await context.send_private_message(user_id, message_segments, callback, account_id)
 
 async def send_group_message(
     context: BotContext,
@@ -194,14 +200,20 @@ async def send_group_message(
     if badword_bypass:
         logger.info(f"消息发送成功(敏感词绕过高阶): 群{group_id}, 原因:{bypass_reason}, 请求用户:{bypass_request_user}")
     
+    # 获取当前账号ID（parallel模式下使用）
+    account_id = get_current_account_id()
+    if account_id is not None:
+        logger.debug(f"使用账号 {account_id} 发送群消息")
+    
     # 调用BotContext中的方法发送消息
-    return await context.send_group_message(group_id, message_segments, callback)
+    return await context.send_group_message(group_id, message_segments, callback, account_id)
 
 async def process_command_response(
     context: BotContext,
     response: Union[str, CommandResponse, None],
     group_id: str,
-    user_id: str
+    user_id: str,
+    account_id: int = None
 ) -> Optional[str]:
     """处理命令响应并发送消息
     
@@ -210,6 +222,7 @@ async def process_command_response(
         response: 命令返回的响应
         group_id: 群ID
         user_id: 用户ID
+        account_id: 账号ID（parallel模式下使用），None则使用当前上下文中的账号ID
     
     Returns:
         echo标识或None
@@ -217,10 +230,14 @@ async def process_command_response(
     if response is None:
         return None
     
+    # 如果未指定account_id，尝试从上下文获取
+    if account_id is None:
+        account_id = get_current_account_id()
+    
     try:
         # 处理字符串响应
         if isinstance(response, str):
-            builder = MessageBuilder(context)
+            builder = MessageBuilder(context, account_id)
             builder.set_group_id(group_id)
             builder.set_user_id(user_id)
             builder.add_at()
@@ -233,7 +250,7 @@ async def process_command_response(
                 return None
             
             elif response.type == "text":
-                builder = MessageBuilder(context)
+                builder = MessageBuilder(context, account_id)
                 builder.set_group_id(group_id)
                 builder.set_user_id(user_id)
                 builder.add_at()
@@ -250,7 +267,7 @@ async def process_command_response(
                 return await builder.send()
             
             elif response.type == "raw":
-                builder = MessageBuilder(context)
+                builder = MessageBuilder(context, account_id)
                 builder.set_group_id(group_id)
                 # 将原始消息段添加到builder中
                 for segment in response.data:

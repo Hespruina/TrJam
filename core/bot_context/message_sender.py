@@ -37,34 +37,43 @@ class MessageSender:
         """设置上下文引用，用于访问多WebSocket管理器"""
         self._context = context
 
-    async def send_group_message(self, group_id: str, message: list, callback: Optional[Callable] = None) -> Optional[str]:
+    async def send_group_message(self, group_id: str, message: list, callback: Optional[Callable] = None, account_id: int = None) -> Optional[str]:
         """发送群消息并可选注册回调函数
         
         :param group_id: 群号
         :param message: 消息内容，格式为[{type: "text", data: {text: "消息内容"}}]
         :param callback: 消息发送成功后的回调函数，接收message_id作为参数
+        :param account_id: 指定账号ID（parallel模式下使用），None则使用当前活跃账号
         :return: echo标识或None
         """
         # 使用传统的单WebSocket发送
-        return await self._send_group_message_single(group_id, message, callback)
+        return await self._send_group_message_single(group_id, message, callback, account_id)
     
-    async def send_private_message(self, user_id: str, message: list, callback: Optional[Callable] = None) -> Optional[str]:
+    async def send_private_message(self, user_id: str, message: list, callback: Optional[Callable] = None, account_id: int = None) -> Optional[str]:
         """发送私聊消息并可选注册回调函数
         
         :param user_id: 用户ID
         :param message: 消息内容，格式为[{type: "text", data: {text: "消息内容"}}]
         :param callback: 消息发送成功后的回调函数，接收message_id作为参数
+        :param account_id: 指定账号ID（parallel模式下使用），None则使用当前活跃账号
         :return: echo标识或None
         """
         # 使用传统的单WebSocket发送
-        return await self._send_private_message_single(user_id, message, callback)
+        return await self._send_private_message_single(user_id, message, callback, account_id)
     
-    async def _send_private_message_single(self, user_id: str, message: list, callback: Optional[Callable] = None) -> Optional[str]:
+    async def _send_private_message_single(self, user_id: str, message: list, callback: Optional[Callable] = None, account_id: int = None) -> Optional[str]:
         """单WebSocket模式下发送私聊消息"""
-        return await self._send_message_with_retry('send_private_msg', {'user_id': user_id, 'message': message}, callback)
+        return await self._send_message_with_retry('send_private_msg', {'user_id': user_id, 'message': message}, callback, account_id)
     
-    async def _send_message_with_retry(self, action: str, api_params: dict, callback: Optional[Callable] = None) -> Optional[str]:
-        """发送消息并在特定错误时重试一次"""
+    async def _send_message_with_retry(self, action: str, api_params: dict, callback: Optional[Callable] = None, account_id: int = None) -> Optional[str]:
+        """发送消息并在特定错误时重试一次
+        
+        Args:
+            action: API动作
+            api_params: API参数
+            callback: 回调函数
+            account_id: 指定账号ID（parallel模式下使用）
+        """
         # 如果提供了回调函数，则存储它
         echo = str(uuid.uuid4())
         if callback:
@@ -73,7 +82,7 @@ class MessageSender:
         # 最多尝试2次（原始尝试 + 1次重试）
         for attempt in range(2):
             try:
-                response = await call_onebot_api(self._context, action, api_params)
+                response = await call_onebot_api(self._context, action, api_params, account_id=account_id)
                 if response and response.get('success'):
                     data = response.get('data', {})
                     # 检查响应格式
@@ -132,9 +141,9 @@ class MessageSender:
     
 
     
-    async def _send_group_message_single(self, group_id: str, message: list, callback: Optional[Callable] = None) -> Optional[str]:
+    async def _send_group_message_single(self, group_id: str, message: list, callback: Optional[Callable] = None, account_id: int = None) -> Optional[str]:
         """单WebSocket模式下发送群消息"""
-        return await self._send_message_with_retry('send_group_msg', {'group_id': group_id, 'message': message}, callback)
+        return await self._send_message_with_retry('send_group_msg', {'group_id': group_id, 'message': message}, callback, account_id)
     
 
 

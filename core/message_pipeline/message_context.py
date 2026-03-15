@@ -17,6 +17,12 @@ class MessageContext:
         self.message_type = event.get('message_type', '')  # 消息类型：group/private
         self.post_type = event.get('post_type', '')  # 事件类型：message/request/notice
         
+        # 账号信息（parallel模式下使用）
+        self.account_id = event.get('_account_id')  # 接收消息的账号ID
+        self.account_info = None  # 账号详细信息
+        if self.account_id is not None:
+            self.account_info = core_context.get_account_by_id(self.account_id)
+        
         # 处理结果
         self.processed = False  # 消息是否已被处理
         self.response = None  # 处理响应
@@ -54,5 +60,19 @@ class MessageContext:
         """判断是否应该继续处理"""
         return not self.processed
     
+    def get_account_id(self) -> Optional[int]:
+        """获取接收消息的账号ID"""
+        return self.account_id
+    
+    def get_account_config(self, key: str, default=None):
+        """获取当前账号的配置值"""
+        if self.account_info:
+            return self.account_info.get(key, default)
+        return default
+    
+    def is_parallel_mode(self) -> bool:
+        """检查是否为并行模式"""
+        return self.core_context.is_parallel_mode()
+    
     def __str__(self) -> str:
-        return f"MessageContext(type={self.message_type}, user={self.user_id}, group={self.group_id}, processed={self.processed})"
+        return f"MessageContext(type={self.message_type}, user={self.user_id}, group={self.group_id}, account={self.account_id}, processed={self.processed})"

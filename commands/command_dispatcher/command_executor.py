@@ -19,6 +19,9 @@ async def execute_command(context: BotContext, message: str, user_id: str, group
         int: 0 表示消息处理流程正常完成，1 表示消息处理过程中出现错误
     """
     logger.debug(f"开始处理命令，消息: {message}，用户: {user_id}，群: {group_id}，昵称: {nickname}")
+    
+    # 获取账号ID（parallel模式下使用）
+    account_id = kwargs.get('account_id')
 
     # 输入验证：检查消息长度和格式
     if len(message) > 1000:
@@ -106,7 +109,8 @@ async def execute_command(context: BotContext, message: str, user_id: str, group
                 'raw_message': kwargs.get('raw_message', []),
                 'websocket': kwargs.get('websocket') or context.websocket,
                 'message_id': kwargs.get('message_id'),  # 添加message_id参数
-                'sender_role': sender_role  # 添加sender_role参数
+                'sender_role': sender_role,  # 添加sender_role参数
+                'account_id': account_id  # 添加account_id参数
             }
             
             # 如果有群组配置，添加额外参数

@@ -38,6 +38,15 @@ async def handle_group_message(context: BotContext, event: dict):
     # 检查是否应该处理该消息（基于当前活跃账号）
     if not context.should_handle_message(event):
         return
+    
+    # 获取账号ID（parallel模式下使用）
+    account_id = event.get('_account_id')
+    
+    # 设置当前账号ID到上下文变量，供后续消息发送使用
+    if account_id is not None:
+        from core.current_account import set_current_account_id
+        set_current_account_id(account_id)
+        logger.debug(f"设置当前处理账号ID: {account_id}")
         
     group_id = event.get('group_id', '')
     group_id_str = str(group_id)
@@ -96,7 +105,7 @@ async def handle_group_message(context: BotContext, event: dict):
         
         if context.websocket and not context.websocket.closed:
             # 使用MessageBuilder构建并发送消息
-            builder = MessageBuilder(context)
+            builder = MessageBuilder(context, account_id)
             builder.set_group_id(group_id)
             builder.add_text(f"繁体转换：{simplified_text}")
             builder.set_callback(simplified_message_sent_callback)
@@ -140,7 +149,7 @@ async def handle_group_message(context: BotContext, event: dict):
                 
                 if context.websocket and not context.websocket.closed:
                     # 使用MessageBuilder构建并发送消息
-                    builder = MessageBuilder(context)
+                    builder = MessageBuilder(context, account_id)
                     builder.set_group_id(group_id)
                     builder.add_at(user_id)
                     builder.add_text(f"{result}")
@@ -168,7 +177,8 @@ async def handle_group_message(context: BotContext, event: dict):
             message_id = event.get('message_id')
             await dispatch_command(context, original_message, user_id, group_id, nickname, 
                                  raw_message=raw_message, websocket=context.websocket, 
-                                 message_id=message_id, sender_role=sender_role)
+                                 message_id=message_id, sender_role=sender_role,
+                                 account_id=account_id)
         except Exception as e:
             logger.error(f"处理命令 {original_message} 时发生异常: {e}", exc_info=True)
     # 2. 检查是否为无斜杠的中文命令
@@ -188,12 +198,13 @@ async def handle_group_message(context: BotContext, event: dict):
                 message_id = event.get('message_id')
                 await dispatch_command(context, original_message, user_id, group_id, nickname, 
                                      raw_message=raw_message, websocket=context.websocket, 
-                                     message_id=message_id, sender_role=sender_role)
+                                     message_id=message_id, sender_role=sender_role,
+                                     account_id=account_id)
             except Exception as e:
                 logger.error(f"处理无斜杠命令 {first_word} 时发生异常: {e}", exc_info=True)
     
     # 处理图片并检查是否为腿照
-    await handle_image_messages(context, event, group_id, user_id, nickname)
+    await handle_image_messages(context, event, group_id, user_id, nickname, account_id)
 
 async def _is_user_blacklisted(context: BotContext, group_id: str, user_id: str) -> bool:
     """检查用户是否在群组黑名单中"""
@@ -216,7 +227,7 @@ async def _is_user_blacklisted(context: BotContext, group_id: str, user_id: str)
     
     return False
 
-async def process_image_for_leg_detection(context, event, group_id, user_id, nickname, image_urls):
+async def process_image_for_leg_detection(context, event, group_id, user_id, nickname, image_urls, account_id=None):
     """在后台处理图片并识别腿照的协程函数"""
     import os
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -238,13 +249,13 @@ async def process_image_for_leg_detection(context, event, group_id, user_id, nic
                     if is_leg_photo and event.get('message_id'):
                         # 调用onebot API设置精华消息
                         essence_result = await call_onebot_api(
-                            context, 'set_essence_msg', {'message_id': event.get('message_id')}
+                            context, 'set_essence_msg', {'message_id': event.get('message_id')}, account_id=account_id
                         )
                         # 检查设置精华是否成功
                         if essence_result and essence_result.get('success') and essence_result.get('data', {}).get('status') == 'ok':
                             logger.info(f"成功将腿照设置为精华消息，群: {group_id}，用户: {user_id}({nickname})")
                             # 发送提示消息
-                            builder = MessageBuilder(context)
+                            builder = MessageBuilder(context, account_id)
                             builder.set_group_id(str(group_id))
                             builder.set_user_id(user_id)
                             builder.add_at()
@@ -265,7 +276,7 @@ async def process_image_for_leg_detection(context, event, group_id, user_id, nic
     except Exception as e:
         log_exception(logger, "处理图片消息时发生异常", e)
 
-async def handle_image_messages(context: BotContext, event: dict, group_id: str, user_id: str, nickname: str):
+async def handle_image_messages(context: BotContext, event: dict, group_id: str, user_id: str, nickname: str, account_id=None):
     """处理消息中的图片，识别腿照并设置精华"""
     # 检查是否启用了腿照自动设为精华功能
     # 使用toggle功能控制的配置
@@ -303,7 +314,7 @@ async def handle_image_messages(context: BotContext, event: dict, group_id: str,
     
     # 创建后台任务处理图片，避免阻塞WebSocket连接
     create_monitored_task(
-        process_image_for_leg_detection(context, event, group_id, user_id, nickname, image_urls),
+        process_image_for_leg_detection(context, event, group_id, user_id, nickname, image_urls, account_id),
         f"LegPhotoDetection-{group_id}-{user_id}"
     )
 
@@ -376,7 +387,7 @@ async def _handle_sensitive_message(context: BotContext, event: dict, group_id, 
                 if recall_result and recall_result.get('success') and recall_result.get('data', {}).get('status') == 'ok':
                     logger.info(f"已成功撤回敏感消息，群: {group_id}，用户: {user_id}")
                     # 构建消息并发送
-                    builder = MessageBuilder(context)
+                    builder = MessageBuilder(context, account_id)
                     builder.set_group_id(str(group_id))
                     builder.set_user_id(user_id)
                     builder.add_at()
@@ -427,7 +438,7 @@ async def _handle_auto_mute(context: BotContext, user_id: str, nickname: str, gr
         if mute_result and mute_result.get('success') and mute_result.get('data', {}).get('status') == 'ok':
             logger.info(f"成功禁言用户 {user_id}({nickname})，时长：{mute_duration}秒")
             # 构建消息并发送
-            builder = MessageBuilder(context)
+            builder = MessageBuilder(context, account_id)
             builder.set_group_id(str(group_id))
             builder.set_user_id(user_id)
             builder.add_at()
@@ -466,7 +477,7 @@ async def _handle_auto_mute(context: BotContext, user_id: str, nickname: str, gr
                     failure_reason = f"业务状态非成功: {mute_result.get('data', {}).get('status', '未知')}"
             logger.error(f"禁言用户失败，群: {group_id}，用户: {user_id}，原因: {failure_reason}")
             # 发送失败消息
-            builder = MessageBuilder(context)
+            builder = MessageBuilder(context, account_id)
             builder.set_group_id(str(group_id))
             builder.set_user_id(user_id)
             builder.add_at()
@@ -475,7 +486,7 @@ async def _handle_auto_mute(context: BotContext, user_id: str, nickname: str, gr
     except Exception as e:
         logger.error(f"处理用户主动禁言时发生异常: {e}")
         # 发送异常消息
-        builder = MessageBuilder(context)
+        builder = MessageBuilder(context, account_id)
         builder.set_group_id(str(group_id))
         builder.set_user_id(user_id)
         builder.add_at()
@@ -483,7 +494,7 @@ async def _handle_auto_mute(context: BotContext, user_id: str, nickname: str, gr
         await builder.send()
 
         # 使用MessageBuilder构建并发送欢迎消息
-        builder = MessageBuilder(context)
+        builder = MessageBuilder(context, account_id)
         builder.set_group_id(group_id)
         builder.add_text(welcome_message)
         await builder.send()

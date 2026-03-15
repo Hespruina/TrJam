@@ -51,6 +51,13 @@ class MultiWebSocketManager:
         self._lock = asyncio.Lock()
         self._connection_success_callback = None
         self._callback_executed = False  # 添加回调执行状态跟踪
+        self.mode = 'fallback'  # 运行模式: 'fallback', 'parallel' 或 'parallel-pro'
+        
+        # Parallel Pro 模式专用：群列表缓存
+        self._group_list_cache: Dict[int, List[dict]] = {}  # account_id -> group_list
+        self._group_accounts_map: Dict[str, List[int]] = {}  # group_id -> [account_ids]
+        self._group_list_task = None
+        
         logger.debug("MultiWebSocketManager已初始化")
     
     def set_connection_success_callback(self, callback):
@@ -62,9 +69,9 @@ class MultiWebSocketManager:
         accounts_config = self.context.get_config_value('accounts', [])
         logger.info(f"从配置中加载了 {len(accounts_config)} 个账号")
         
-        # 读取容灾模式配置
+        # 读取运行模式配置
         self.mode = self.context.get_config_value('mode', 'fallback')
-        logger.info(f"容灾模式: {self.mode}")
+        logger.info(f"运行模式: {self.mode}")
         
         for index, account_config in enumerate(accounts_config):
             logger.debug(f"处理账号配置 #{index}: {account_config}")
@@ -88,8 +95,15 @@ class MultiWebSocketManager:
         
         logger.info(f"成功初始化 {len(self.connections)} 个账号连接")
         
-        # 设置初始活跃连接为优先级最高的账号
-        self._set_initial_active_connection()
+        # 根据模式设置活跃连接
+        if self.mode in ('parallel', 'parallel-pro'):
+            # Parallel 和 Parallel Pro 模式下所有账号都是活跃的
+            logger.info(f"{self.mode} 模式: 所有账号将同时保持活跃")
+            if self.connections:
+                self.active_connection_id = min(self.connections.keys())
+        else:
+            # Fallback 模式下设置初始活跃连接为优先级最高的账号
+            self._set_initial_active_connection()
         
         # 初始化所有连接的心跳时间为当前时间，避免首次检查时出现超大时间差
         current_time = time.time()
@@ -129,6 +143,12 @@ class MultiWebSocketManager:
         # 启动连接监控任务
         monitor_task = asyncio.create_task(self._monitor_connections())
         tasks.append(monitor_task)
+        
+        # Parallel Pro 模式下启动群列表更新任务
+        if self.mode == 'parallel-pro':
+            self._group_list_task = asyncio.create_task(self._update_group_list_loop())
+            tasks.append(self._group_list_task)
+            logger.info("Parallel Pro 模式: 已启动群列表更新任务")
         
         logger.debug(f"已启动 {len(tasks)} 个连接任务")
         
@@ -182,7 +202,19 @@ class MultiWebSocketManager:
                         
                         # 更新上下文的websocket
                         async with self._lock:
-                            if conn.id == self.active_connection_id:
+                            if self.mode in ('parallel', 'parallel-pro'):
+                                # Parallel 和 Parallel Pro 模式下，每个连接都独立处理消息
+                                logger.info(f"账号 {conn.id} 在 {self.mode} 模式下连接成功")
+                                # 第一个连接的回调用于启动子机器人管理器
+                                if not self._callback_executed and self._connection_success_callback:
+                                    logger.info(f"{self.mode} 模式: 准备执行连接成功回调")
+                                    try:
+                                        await self._connection_success_callback()
+                                        self._callback_executed = True
+                                        logger.info("连接成功回调执行完成")
+                                    except Exception as e:
+                                        logger.error(f"执行连接成功回调时发生错误: {e}", exc_info=True)
+                            elif conn.id == self.active_connection_id:
                                 logger.info(f"账号 {conn.id} 是活跃连接 (active_id: {self.active_connection_id})")
                                 # 只更新活跃连接的上下文
                                 await self.context.set_websocket(ws)
@@ -234,9 +266,35 @@ class MultiWebSocketManager:
         while self._is_running:
             try:
                 await asyncio.sleep(5)  # 每5秒检查一次
-                await self._check_and_transfer()
+                # Parallel 模式下不需要故障转移，只监控心跳
+                if self.mode == 'parallel':
+                    await self._check_connections_health()
+                else:
+                    await self._check_and_transfer()
             except Exception as e:
                 logger.error(f"连接监控任务异常: {e}")
+    
+    async def _check_connections_health(self):
+        """Parallel 模式下检查所有连接的健康状态（仅监控，不切换）"""
+        current_time = time.time()
+        for conn in self.connections.values():
+            if conn.is_connected:
+                time_since_last_heartbeat = current_time - conn.last_heartbeat_time
+                expected_heartbeat_interval = conn.heartbeat_interval
+                
+                # 安全检查
+                if time_since_last_heartbeat < 0 or time_since_last_heartbeat > 86400:
+                    logger.warning(f"账号 {conn.id} 心跳时间异常，重置为当前时间")
+                    conn.last_heartbeat_time = current_time
+                    time_since_last_heartbeat = 0
+                
+                # 检查是否超时
+                if time_since_last_heartbeat > expected_heartbeat_interval * 3:
+                    conn.is_healthy = False
+                    logger.warning(f"账号 {conn.id} 心跳超时({time_since_last_heartbeat:.1f}秒)，标记为不健康")
+                else:
+                    conn.is_healthy = True
+                    logger.debug(f"账号 {conn.id} 心跳正常({time_since_last_heartbeat:.1f}秒)")
 
     async def _check_and_transfer(self):
         """检查连接状态并执行必要的故障转移"""
@@ -406,6 +464,25 @@ class MultiWebSocketManager:
                     logger.warning(f"账号 {conn.id} 心跳异常")
                 return  # 找到匹配的连接后直接返回
         logger.debug(f"未找到匹配账号 {self_id} 的连接")
+
+    def get_connection_by_id(self, account_id: int) -> Optional[AccountConnection]:
+        """根据账号ID获取连接信息"""
+        return self.connections.get(account_id)
+    
+    def get_connection_by_qq(self, bot_qq: str) -> Optional[AccountConnection]:
+        """根据QQ号获取连接信息"""
+        for conn in self.connections.values():
+            if conn.bot_qq == str(bot_qq):
+                return conn
+        return None
+    
+    def get_all_connections(self) -> Dict[int, AccountConnection]:
+        """获取所有连接"""
+        return self.connections.copy()
+    
+    def is_parallel_mode(self) -> bool:
+        """检查是否为并行模式"""
+        return self.mode == 'parallel'
 
     def stop(self):
         """停止主循环。"""

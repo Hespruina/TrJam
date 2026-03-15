@@ -10,7 +10,7 @@ from commands.help_command.help_data import generate_help_groups
 
 logger = get_logger("HelpCommandSender")
 
-async def process_help_request(context: BotContext, user_id: str, group_id: str, server_name: str, group_id_str: str, processing_message_id: str = None, sender_role: str = None) -> None:
+async def process_help_request(context: BotContext, user_id: str, group_id: str, server_name: str, group_id_str: str, processing_message_id: str = None, sender_role: str = None, account_id: int = None) -> None:
     """在后台处理帮助请求"""
     # 检查群组是否配置
     is_configured = False
@@ -21,17 +21,17 @@ async def process_help_request(context: BotContext, user_id: str, group_id: str,
     
     try:
         # 使用fakemsg格式发送命令列表
-        await send_help_as_fakemsg(context, user_id, group_id, is_configured, sender_role=sender_role)
+        await send_help_as_fakemsg(context, user_id, group_id, is_configured, sender_role=sender_role, account_id=account_id)
         
         # 撤回处理中提示消息
         if processing_message_id:
-            await recall_processing_message_by_id(context, processing_message_id)
+            await recall_processing_message_by_id(context, processing_message_id, account_id)
         else:
-            await try_recall_processing_message(context, user_id, group_id)
+            await try_recall_processing_message(context, user_id, group_id, account_id)
             
     except Exception as e:
         logger.error(f"处理帮助命令时发生异常: {e}")
-        error_builder = MessageBuilder(context)
+        error_builder = MessageBuilder(context, account_id)
         error_builder.set_group_id(group_id)
         error_builder.set_user_id(user_id)
         error_builder.add_at()
@@ -40,12 +40,12 @@ async def process_help_request(context: BotContext, user_id: str, group_id: str,
         
         # 撤回处理中提示消息
         if processing_message_id:
-            await recall_processing_message_by_id(context, processing_message_id)
+            await recall_processing_message_by_id(context, processing_message_id, account_id)
         else:
-            await try_recall_processing_message(context, user_id, group_id)
+            await try_recall_processing_message(context, user_id, group_id, account_id)
 
 
-async def try_recall_processing_message(context: BotContext, user_id: str, group_id: str) -> None:
+async def try_recall_processing_message(context: BotContext, user_id: str, group_id: str, account_id: int = None) -> None:
     """尝试撤回处理中提示消息"""
     try:
         if hasattr(context, '_processing_messages'):
@@ -53,12 +53,12 @@ async def try_recall_processing_message(context: BotContext, user_id: str, group
             if message_key in context._processing_messages:
                 message_id = context._processing_messages[message_key]
                 # 调用API撤回消息
-                await recall_processing_message_by_id(context, message_id)
+                await recall_processing_message_by_id(context, message_id, account_id)
     except Exception as e:
         logger.warning(f"撤回处理中提示消息时发生异常: {e}")
 
 
-async def recall_processing_message_by_id(context: BotContext, message_id: str) -> None:
+async def recall_processing_message_by_id(context: BotContext, message_id: str, account_id: int = None) -> None:
     """根据消息ID撤回处理中提示消息"""
     try:
         # 从存储中移除已撤回的消息ID
@@ -76,7 +76,8 @@ async def recall_processing_message_by_id(context: BotContext, message_id: str) 
         result = await call_onebot_api(
             context=context,
             action="delete_msg",
-            params={"message_id": message_id}
+            params={"message_id": message_id},
+            account_id=account_id
         )
         
         if not (result and result.get("success")):
@@ -85,7 +86,7 @@ async def recall_processing_message_by_id(context: BotContext, message_id: str) 
         logger.warning(f"撤回处理中提示消息时发生异常: {e}")
 
 
-async def send_help_as_fakemsg(context: BotContext, user_id: str, group_id: str, is_configured: bool, sender_role: str = None) -> None:
+async def send_help_as_fakemsg(context: BotContext, user_id: str, group_id: str, is_configured: bool, sender_role: str = None, account_id: int = None) -> None:
     """使用fakemsg格式发送帮助信息，每个命令作为单独的消息节点"""
     logger.info(f"开始处理fakemsg格式的帮助请求，用户ID: {user_id}，群ID: {group_id}")
     
@@ -183,7 +184,8 @@ async def send_help_as_fakemsg(context: BotContext, user_id: str, group_id: str,
         result = await call_onebot_api(
             context=context,
             action='send_group_forward_msg',
-            params=payload
+            params=payload,
+            account_id=account_id
         )
         
         if result is None:
@@ -199,7 +201,7 @@ async def send_help_as_fakemsg(context: BotContext, user_id: str, group_id: str,
         # 如果fakemsg发送失败，回退到简单文本格式
         from commands.help_command.help_formatter import get_help_info
         help_text = get_help_info(context, user_id, group_id, is_configured)
-        builder = MessageBuilder(context)
+        builder = MessageBuilder(context, account_id)
         builder.set_group_id(group_id)
         builder.set_user_id(user_id)
         builder.add_at()

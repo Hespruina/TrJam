@@ -54,14 +54,32 @@ class BotContext:
     def should_handle_message(self, event: dict) -> bool:
         """检查是否应该处理该消息（基于当前活跃账号）"""
         return self._account_manager.should_handle_message(event)
-
-    async def send_group_message(self, group_id: str, message: list, callback: Optional[Callable] = None) -> Optional[str]:
-        """发送群消息并可选注册回调函数"""
-        return await self._message_sender.send_group_message(group_id, message, callback)
     
-    async def send_private_message(self, user_id: str, message: list, callback: Optional[Callable] = None) -> Optional[str]:
-        """发送私聊消息并可选注册回调函数"""
-        return await self._message_sender.send_private_message(user_id, message, callback)
+    def is_parallel_mode(self) -> bool:
+        """检查是否为并行模式"""
+        return self._account_manager.is_parallel_mode()
+    
+    def get_account_by_id(self, account_id: int) -> Optional[Dict[str, Any]]:
+        """根据账号ID获取账号信息"""
+        return self._account_manager.get_account_by_id(account_id)
+    
+    def get_account_by_qq(self, bot_qq: str) -> Optional[Dict[str, Any]]:
+        """根据QQ号获取账号信息"""
+        return self._account_manager.get_account_by_qq(bot_qq)
+
+    async def send_group_message(self, group_id: str, message: list, callback: Optional[Callable] = None, account_id: int = None) -> Optional[str]:
+        """发送群消息并可选注册回调函数
+        
+        :param account_id: 指定账号ID（parallel模式下使用），None则使用当前活跃账号
+        """
+        return await self._message_sender.send_group_message(group_id, message, callback, account_id)
+    
+    async def send_private_message(self, user_id: str, message: list, callback: Optional[Callable] = None, account_id: int = None) -> Optional[str]:
+        """发送私聊消息并可选注册回调函数
+        
+        :param account_id: 指定账号ID（parallel模式下使用），None则使用当前活跃账号
+        """
+        return await self._message_sender.send_private_message(user_id, message, callback, account_id)
 
     def register_message_callback(self, echo: str, callback: Callable):
         """注册消息回调函数"""

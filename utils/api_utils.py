@@ -116,16 +116,37 @@ async def call_api(context: Any, params=None, api_base=None) -> Optional[Dict[st
 
     return await safe_api_request(api_base, method='get', params=params, context=context)
 
-async def call_onebot_api(context: Any, action, params=None) -> Optional[Dict[str, Any]]:
-    """调用 onebot OneBot API"""
-    onebot_api_base = context.get_config_value('onebot_api_base')
+async def call_onebot_api(context: Any, action, params=None, account_id: int = None) -> Optional[Dict[str, Any]]:
+    """调用 onebot OneBot API
+    
+    Args:
+        context: BotContext对象
+        action: API动作
+        params: API参数
+        account_id: 指定账号ID（parallel模式下使用），None则使用当前活跃账号
+    """
+    # 根据 account_id 获取对应账号的配置
+    if account_id is not None:
+        account_info = context.get_account_by_id(account_id)
+        if account_info:
+            onebot_api_base = account_info.get('onebot_api_base')
+            onebot_access_token = account_info.get('onebot_access_token')
+            logger.debug(f"使用账号 {account_id} 的API配置")
+        else:
+            logger.warning(f"账号 {account_id} 不存在，使用默认配置")
+            onebot_api_base = context.get_config_value('onebot_api_base')
+            onebot_access_token = context.get_config_value('onebot_access_token')
+    else:
+        onebot_api_base = context.get_config_value('onebot_api_base')
+        onebot_access_token = context.get_config_value('onebot_access_token')
+    
     if not onebot_api_base:
         logger.error("onebot API Base URL 未配置")
         return {"success": False, "error": "onebot API Base URL 未配置"}
 
     api_url = f"{onebot_api_base.rstrip('/')}/{action.lstrip('/')}"
     headers = {
-        "Authorization": f"Bearer {context.get_config_value('onebot_access_token')}",
+        "Authorization": f"Bearer {onebot_access_token}",
         "Content-Type": "application/json",
         "User-Agent": "QQBot/1.0"
     }
