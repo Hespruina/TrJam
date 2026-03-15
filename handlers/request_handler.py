@@ -33,22 +33,27 @@ async def handle_request_event(context: BotContext, event: dict):
 
 async def _handle_friend_request(context: BotContext, event: dict):
     """处理好友申请。"""
+    # 从事件中获取账号 ID（Parallel-Pro 模式）
+    account_id = event.get('_account_id') if event else None
+    if account_id:
+        logger.debug(f"好友申请事件来自账号 ID: {account_id}")
+    
     user_id = event.get('user_id', '')
     comment = event.get('comment', '无验证信息')
     flag = event.get('flag', '')
-    logger.info(f"收到好友申请 - QQ: {user_id}, 验证信息: {comment}")
+    logger.info(f"收到好友申请 - QQ: {user_id}, 验证信息：{comment}")
     
-    # 添加debug级别的详细日志
-    logger.debug(f"好友申请详细信息 - 用户ID: {user_id}, 验证信息: {comment}, flag: {flag}")
+    # 添加 debug 级别的详细日志
+    logger.debug(f"好友申请详细信息 - 用户 ID: {user_id}, 验证信息：{comment}, flag: {flag}")
 
     api_params = {
         "flag": flag,
         "approve": True
     }
     
-    logger.debug(f"准备发送同意好友申请的请求: {api_params}")
+    logger.debug(f"准备发送同意好友申请的请求：{api_params}")
     
-    response = await call_onebot_api(context, 'set_friend_add_request', api_params)
+    response = await call_onebot_api(context, 'set_friend_add_request', api_params, account_id=account_id)
     if response and response.get('success'):
         logger.info(f"已自动同意好友申请: {user_id}")
         logger.debug(f"成功发送同意好友申请的请求")
@@ -68,19 +73,24 @@ async def _handle_group_request(context: BotContext, event: dict):
     logger.debug(f"群请求详细信息 - 类型: {sub_type}, 用户ID: {user_id}, 群ID: {group_id}, 群名称: {group_name}, flag: {flag}")
 
     if sub_type == 'invite':
-        await _handle_group_invite(context, user_id, group_name, group_id, flag)
+        await _handle_group_invite(context, user_id, group_name, group_id, flag, event)
     elif sub_type == 'add':
         await _handle_group_add_request(context, user_id, group_name, group_id, flag, event)
 
-async def _handle_group_invite(context: BotContext, user_id: str, group_name: str, group_id: str, flag: str):
+async def _handle_group_invite(context: BotContext, user_id: str, group_name: str, group_id: str, flag: str, event: dict = None):
     """处理群聊邀请。"""
-    logger.info(f"收到群聊邀请 - 邀请人: {user_id}, 群: {group_name}({group_id})")
+    logger.info(f"收到群聊邀请 - 邀请人：{user_id}, 群：{group_name}({group_id})")
+    
+    # 从事件中获取账号 ID（Parallel-Pro 模式）
+    account_id = event.get('_account_id') if event else None
+    if account_id:
+        logger.debug(f"群邀请事件来自账号 ID: {account_id}")
     
     # 检查邀请人是否在群组黑名单中
     if await _is_user_blacklisted(context, group_id, user_id):
         logger.info(f"邀请人 {user_id} 在群 {group_id} 的黑名单中，拒绝其邀请")
         # 拒绝群邀请
-        await _reject_group_invite(context, flag, "邀请人在群黑名单中")
+        await _reject_group_invite(context, flag, "邀请人在群黑名单中", account_id=account_id)
         
         # 向report群发送通知
         report_group_id = context.get_config_value("report_group")
@@ -112,9 +122,9 @@ async def _handle_group_invite(context: BotContext, user_id: str, group_name: st
         "approve": True
     }
     
-    logger.debug(f"准备发送同意群邀请的请求: {api_params}")
+    logger.debug(f"准备发送同意群邀请的请求：{api_params}")
     
-    response = await call_onebot_api(context, 'set_group_add_request', api_params)
+    response = await call_onebot_api(context, 'set_group_add_request', api_params, account_id=account_id)
     if response and response.get('success'):
         logger.info(f"已自动同意入群邀请: {group_name}({group_id})")
         logger.debug(f"成功发送同意群邀请的请求")
@@ -150,7 +160,7 @@ async def _handle_group_invite(context: BotContext, user_id: str, group_name: st
         error_msg = response.get('error', '未知错误') if response else '无响应'
         logger.warning(f"同意入群邀请失败: {error_msg}")
 
-async def _reject_group_invite(context: BotContext, flag: str, reason: str):
+async def _reject_group_invite(context: BotContext, flag: str, reason: str, account_id: int = None):
     """拒绝群邀请"""
     api_params = {
         "flag": flag,
@@ -159,9 +169,9 @@ async def _reject_group_invite(context: BotContext, flag: str, reason: str):
         "reason": reason
     }
     
-    logger.debug(f"准备发送拒绝群邀请的请求: {api_params}")
+    logger.debug(f"准备发送拒绝群邀请的请求：{api_params}")
     
-    response = await call_onebot_api(context, 'set_group_add_request', api_params)
+    response = await call_onebot_api(context, 'set_group_add_request', api_params, account_id=account_id)
     if response and response.get('success'):
         logger.info(f"已拒绝群邀请，原因: {reason}")
         logger.debug(f"成功发送拒绝群邀请的请求")
@@ -171,13 +181,18 @@ async def _reject_group_invite(context: BotContext, flag: str, reason: str):
 
 async def _handle_group_add_request(context: BotContext, user_id: str, group_name: str, group_id: str, flag: str, event: dict):
     """处理加群申请。"""
-    logger.info(f"收到加群申请 - 申请人: {user_id}, 群: {group_name}({group_id})")
+    # 从事件中获取账号 ID（Parallel-Pro 模式）
+    account_id = event.get('_account_id') if event else None
+    if account_id:
+        logger.debug(f"加群申请事件来自账号 ID: {account_id}")
+    
+    logger.info(f"收到加群申请 - 申请人：{user_id}, 群：{group_name}({group_id})")
     
     # 检查用户是否在黑名单中
     if await _is_user_blacklisted(context, group_id, user_id):
         logger.info(f"用户 {user_id} 在群 {group_id} 的黑名单中，拒绝其加群申请")
         # 拒绝加群申请
-        await _reject_group_application(context, flag, "用户在黑名单中")
+        await _reject_group_application(context, flag, "用户在黑名单中", account_id=account_id)
         
         # 向群内发送通知
         builder = MessageBuilder(context)
@@ -196,7 +211,8 @@ async def _handle_group_add_request(context: BotContext, user_id: str, group_nam
         logger.debug(f"尝试获取申请人 {user_id} 的陌生人信息")
         stranger_info_data = await call_onebot_api(
             context, 'get_stranger_info',
-            {'user_id': int(user_id), 'no_cache': False}
+            {'user_id': int(user_id), 'no_cache': False},
+            account_id=account_id
         )
         
         logger.debug(f"获取陌生人信息的API响应: {str(stranger_info_data)}")
@@ -221,15 +237,15 @@ async def _handle_group_add_request(context: BotContext, user_id: str, group_nam
     root_user_id = context.get_config_value("Root_user")
     logger.debug(f"当前配置的Root用户ID: {root_user_id}")
     
-    # 如果是ROOT用户，特殊处理
+    # 如果是 ROOT 用户，特殊处理
     if root_user_id and str(user_id) == str(root_user_id):
-        logger.info(f"ROOT用户 {user_id} 申请加群，无条件通过，不记录成员信息。")
-        await _approve_root_user_request(context, user_id, group_name, group_id, flag)
+        logger.info(f"ROOT 用户 {user_id} 申请加群，无条件通过，不记录成员信息。")
+        await _approve_root_user_request(context, user_id, group_name, group_id, flag, account_id)
         return
 
     # 检查是否有自动审批条件
     if group_config and "event_approvals" in group_config:
-        await _process_event_approvals(context, user_id, group_name, group_id, flag, group_config["event_approvals"], comment)
+        await _process_event_approvals(context, user_id, group_name, group_id, flag, group_config["event_approvals"], comment, account_id)
         return
 
     # 如果没有配置event_approvals或群组未配置，发送详细通知消息到群里
@@ -279,7 +295,7 @@ async def _is_user_blacklisted(context: BotContext, group_id: str, user_id: str)
     
     return False
 
-async def _reject_group_application(context: BotContext, flag: str, reason: str):
+async def _reject_group_application(context: BotContext, flag: str, reason: str, account_id: int = None):
     """拒绝群申请"""
     api_params = {
         "flag": flag,
@@ -288,9 +304,9 @@ async def _reject_group_application(context: BotContext, flag: str, reason: str)
         "reason": reason
     }
     
-    logger.debug(f"准备发送拒绝加群申请的请求: {api_params}")
+    logger.debug(f"准备发送拒绝加群申请的请求：{api_params}")
     
-    response = await call_onebot_api(context, 'set_group_add_request', api_params)
+    response = await call_onebot_api(context, 'set_group_add_request', api_params, account_id=account_id)
     if response and response.get('success'):
         logger.info(f"已拒绝加群申请，原因: {reason}")
         logger.debug(f"成功发送拒绝加群申请的请求")
@@ -298,15 +314,15 @@ async def _reject_group_application(context: BotContext, flag: str, reason: str)
         error_msg = response.get('error', '未知错误') if response else '无响应'
         logger.warning(f"拒绝加群申请失败: {error_msg}")
 
-async def _process_event_approvals(context: BotContext, user_id: str, group_name: str, group_id: str, flag: str, approvals: list, comment: str):
+async def _process_event_approvals(context: BotContext, user_id: str, group_name: str, group_id: str, flag: str, approvals: list, comment: str, account_id: int = None):
     """根据配置的审批条件处理加群申请。"""
-    logger.debug(f"开始处理审批条件: {approvals}")
+    logger.debug(f"开始处理审批条件：{approvals}")
     
     # 再次检查用户是否在黑名单中（双重保险）
     if await _is_user_blacklisted(context, group_id, user_id):
         logger.info(f"用户 {user_id} 在群 {group_id} 的黑名单中，拒绝其加群申请（在审批处理中）")
         # 拒绝加群申请
-        await _reject_group_application(context, flag, "用户在黑名单中")
+        await _reject_group_application(context, flag, "用户在黑名单中", account_id=account_id)
         
         # 向群内发送通知
         builder = MessageBuilder(context)
@@ -321,7 +337,8 @@ async def _process_event_approvals(context: BotContext, user_id: str, group_name
         logger.debug(f"尝试获取申请人 {user_id} 的陌生人信息")
         stranger_info_data = await call_onebot_api(
             context, 'get_stranger_info',
-            {'user_id': int(user_id), 'no_cache': False}
+            {'user_id': int(user_id), 'no_cache': False},
+            account_id=account_id
         )
         
         logger.debug(f"获取陌生人信息的API响应: {str(stranger_info_data)}")
@@ -417,7 +434,7 @@ async def _process_event_approvals(context: BotContext, user_id: str, group_name
             else:
                 logger.warning(f"WebSocket连接无效，无法发送审批通过详情到群 {group_name}({group_id})")
             
-            await _approve_applicant(context, user_id, group_name, group_id, flag, stranger_info)
+            await _approve_applicant(context, user_id, group_name, group_id, flag, stranger_info, account_id)
         else:
             logger.info(f"申请人 {user_id} 不符合任何自动审批条件，发送通知消息到群里")
             # 发送详细审批拒绝信息到群里
@@ -446,13 +463,13 @@ async def _process_event_approvals(context: BotContext, user_id: str, group_name
         except:
             pass  # 忽略发送错误通知时的异常
 
-async def _approve_applicant(context: BotContext, user_id: str, group_name: str, group_id: str, flag: str, info: Optional[dict] = None):
+async def _approve_applicant(context: BotContext, user_id: str, group_name: str, group_id: str, flag: str, info: Optional[dict] = None, account_id: int = None):
     """同意用户的加群申请。"""
     # 再次检查用户是否在黑名单中，确保即使验证信息正确也不能通过黑名单检查
     if await _is_user_blacklisted(context, group_id, user_id):
         logger.info(f"用户 {user_id} 在群 {group_id} 的黑名单中，即使验证信息正确也拒绝其加群申请")
         # 拒绝加群申请
-        await _reject_group_application(context, flag, "用户在黑名单中")
+        await _reject_group_application(context, flag, "用户在黑名单中", account_id=account_id)
         
         # 向群内发送通知
         builder = MessageBuilder(context)
@@ -467,9 +484,9 @@ async def _approve_applicant(context: BotContext, user_id: str, group_name: str,
         "approve": True
     }
     
-    logger.debug(f"准备发送同意用户加群申请的请求: {api_params}")
+    logger.debug(f"准备发送同意用户加群申请的请求：{api_params}")
     
-    response = await call_onebot_api(context, 'set_group_add_request', api_params)
+    response = await call_onebot_api(context, 'set_group_add_request', api_params, account_id=account_id)
     if response and response.get('success'):
         logger.info(f"已自动同意用户 {user_id} 的加群申请: {group_name}({group_id})")
         logger.debug(f"成功发送同意用户加群申请的请求")
@@ -499,17 +516,17 @@ async def _approve_applicant(context: BotContext, user_id: str, group_name: str,
         error_msg = response.get('error', '未知错误') if response else '无响应'
         logger.warning(f"同意加群申请失败: {error_msg}")
 
-async def _approve_root_user_request(context: BotContext, user_id: str, group_name: str, group_id: str, flag: str):
-    """处理ROOT用户的加群申请。"""
+async def _approve_root_user_request(context: BotContext, user_id: str, group_name: str, group_id: str, flag: str, account_id: int = None):
+    """处理 ROOT 用户的加群申请。"""
     api_params = {
         "flag": flag,
         "sub_type": "add",
         "approve": True
     }
     
-    logger.debug(f"准备发送同意ROOT用户加群申请的请求: {api_params}")
+    logger.debug(f"准备发送同意 ROOT 用户加群申请的请求：{api_params}")
     
-    response = await call_onebot_api(context, 'set_group_add_request', api_params)
+    response = await call_onebot_api(context, 'set_group_add_request', api_params, account_id=account_id)
     if response and response.get('success'):
         logger.info(f"已通过ROOT用户 {user_id} 的加群申请: {group_name}({group_id})")
         logger.debug(f"成功发送同意ROOT用户加群申请的请求")

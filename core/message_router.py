@@ -197,6 +197,15 @@ class MessageRouter:
                         
                         await group_handler.handle_group_message(self.context, event)
                 elif post_type == 'request':
+                    # 对于 request 事件，尝试从 self_id 获取账号 ID
+                    if account_id is None:
+                        self_id = event.get('self_id')
+                        if self_id:
+                            account = self.context.get_account_by_qq(str(self_id))
+                            if account:
+                                account_id = account.get('id')
+                                logger.debug(f"Request 事件：从 self_id {self_id} 推断出账号 ID {account_id}")
+                    
                     # 检查是否应该处理该消息（Parallel Pro 模式需要传递 account_id）
                     if not self.context.should_handle_message(event, account_id=account_id):
                         continue
@@ -208,6 +217,15 @@ class MessageRouter:
                         await self.plugin_manager.dispatch_event(post_type, event)
                     await request_handler.handle_request_event(self.context, event)
                 elif post_type == 'notice':
+                    # 对于 notice 事件，尝试从 self_id 获取账号 ID
+                    if account_id is None:
+                        self_id = event.get('self_id')
+                        if self_id:
+                            account = self.context.get_account_by_qq(str(self_id))
+                            if account:
+                                account_id = account.get('id')
+                                logger.debug(f"Notice 事件：从 self_id {self_id} 推断出账号 ID {account_id}")
+                    
                     # 检查是否应该处理该消息（Parallel Pro 模式需要传递 account_id）
                     if not self.context.should_handle_message(event, account_id=account_id):
                         continue

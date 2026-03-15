@@ -1,112 +1,96 @@
 # core/bot_context/account_manager.py
-# 账号管理功能
+# 负责管理账号相关的逻辑，包括账号切换、消息处理判断等
 
-import asyncio
-from typing import Optional, Dict, Any
+from typing import Dict, Optional, List, Any
 from logger_config import get_logger
 
-logger = get_logger("BotContextAccountManager")
+logger = get_logger("AccountManager")
 
 class AccountManager:
-    """账号管理器"""
+    """管理机器人账号相关的逻辑"""
     
     def __init__(self, config: Dict[str, Any]):
-        self._config = config
-        self._active_account = None
-        self._lock = asyncio.Lock()
-        self._accounts_map: Dict[int, Dict[str, Any]] = {}  # 账号ID到账号信息的映射
-        self._initialize_active_account()
-        self._initialize_accounts_map()
+        self.config = config
+        self.accounts = {acc['id']: acc for acc in config.get('accounts', []) if 'id' in acc}
+        self.active_account: Optional[Dict[str, Any]] = None
+        logger.debug(f"AccountManager 初始化完成，加载了 {len(self.accounts)} 个账号")
     
-    def _initialize_active_account(self):
-        """初始化活跃账号信息"""
-        accounts = self._config.get('accounts', [])
-        if accounts:
-            # 默认使用第一个账号作为活跃账号
-            primary_account = accounts[0]
-            self._active_account = {
-                'id': primary_account.get('id'),
-                'bot_qq': primary_account.get('bot_qq'),
-                'onebot_api_base': primary_account.get('onebot_api_base'),
-                'onebot_access_token': primary_account.get('onebot_access_token')
-            }
+    def get_config_value(self, key: str, default=None) -> Any:
+        """获取配置值"""
+        return self.config.get(key, default)
     
-    def _initialize_accounts_map(self):
-        """初始化账号映射表"""
-        accounts = self._config.get('accounts', [])
-        for account in accounts:
-            account_id = account.get('id')
-            if account_id is not None:
-                try:
-                    self._accounts_map[int(account_id)] = account
-                except (ValueError, TypeError):
-                    logger.warning(f"账号ID '{account_id}' 无效，跳过")
+    def get_all_accounts(self) -> Dict[int, Dict[str, Any]]:
+        """获取所有账号配置"""
+        return self.accounts.copy()
     
     def get_account_by_id(self, account_id: int) -> Optional[Dict[str, Any]]:
-        """根据账号ID获取账号信息"""
-        return self._accounts_map.get(account_id)
+        """根据账号 ID 获取账号配置"""
+        return self.accounts.get(account_id)
     
     def get_account_by_qq(self, bot_qq: str) -> Optional[Dict[str, Any]]:
-        """根据QQ号获取账号信息"""
-        for account in self._accounts_map.values():
+        """根据 QQ 号获取账号配置"""
+        for account in self.accounts.values():
             if str(account.get('bot_qq')) == str(bot_qq):
                 return account
         return None
     
-    def get_all_accounts(self) -> Dict[int, Dict[str, Any]]:
-        """获取所有账号信息"""
-        return self._accounts_map.copy()
+    def get_active_account(self) -> Optional[Dict[str, Any]]:
+        """获取当前活跃账号"""
+        return self.active_account
+    
+    async def set_active_account(self, account_info: Dict[str, Any]):
+        """设置当前活跃账号"""
+        self.active_account = account_info
+        logger.debug(f"设置活跃账号为：{account_info.get('id')}")
     
     def is_parallel_mode(self) -> bool:
         """检查是否为并行模式"""
-        return self._config.get('mode', 'fallback') == 'parallel'
+        return self.get_config_value('mode', 'fallback') == 'parallel'
     
     def is_parallel_pro_mode(self) -> bool:
-        """检查是否为 Parallel Pro 模式"""
-        return self._config.get('mode', 'fallback') == 'parallel-pro'
+        """检查是否为并行专业模式"""
+        return self.get_config_value('mode', 'fallback') == 'parallel-pro'
     
-    def is_any_parallel_mode(self) -> bool:
-        """检查是否为任意并行模式（parallel 或 parallel-pro）"""
-        mode = self._config.get('mode', 'fallback')
-        return mode in ('parallel', 'parallel-pro')
-
-    async def set_active_account(self, account_info: Dict[str, Any]):
-        """设置当前活跃账号信息。"""
-        async with self._lock:
-            self._active_account = account_info
-            logger.info(f"切换到账号: {account_info.get('id')} (QQ: {account_info.get('bot_qq')})")
-
-    def get_active_account(self) -> Optional[Dict[str, Any]]:
-        """获取当前活跃账号信息。"""
-        return self._active_account
-
-    def get_config_value(self, key: str, default=None):
-        """安全地获取配置值。"""
-        # 如果是获取bot_qq、onebot_api_base等账号相关配置，优先从活跃账号获取
-        if key in ['bot_qq', 'onebot_api_base', 'onebot_access_token'] and self._active_account:
-            if key in self._active_account:
-                return self._active_account[key]
-        
-        return self._config.get(key, default)
-
     def should_handle_message(self, event: dict, account_id: int = None, context=None) -> bool:
         """检查是否应该处理该消息
         
         Args:
             event: 事件数据
-            account_id: 消息来源账号ID（parallel模式下使用）
-            context: BotContext对象（parallel-pro模式下需要）
+            account_id: 消息来源账号 ID（parallel 模式下使用）
+            context: BotContext 对象（parallel-pro 模式下需要）
         """
         # 对于非消息类型的事件，总是处理
         post_type = event.get('post_type')
-        if post_type not in ['message', 'notice', 'request']:
+        
+        # request 类型（加群请求、邀请请求等）应该总是处理，不受优先级影响
+        if post_type == 'request':
+            logger.info(f"处理 request 类型事件：{event.get('request_type', 'unknown')}")
             return True
         
-        # Parallel Pro 模式下，需要检查优先级
+        # notice 类型也总是处理
+        if post_type == 'notice':
+            logger.info(f"处理 notice 类型事件：{event.get('notice_type', 'unknown')}")
+            return True
+        
+        # 对于 meta_event 等其他类型，也总是处理
+        if post_type not in ['message']:
+            return True
+        
+        # Parallel Pro 模式下，群消息需要检查优先级
         if self.is_parallel_pro_mode():
             if account_id is None:
-                logger.debug("Parallel Pro 模式: 无法获取账号ID，忽略消息")
-                return False
+                # 尝试从事件中获取 self_id 来推断账号
+                self_id = event.get('self_id')
+                if self_id:
+                    account = self.get_account_by_qq(str(self_id))
+                    if account:
+                        account_id = account.get('id')
+                        logger.debug(f"从 self_id {self_id} 推断出账号 ID {account_id}")
+                
+                if account_id is None:
+                    logger.warning(f"Parallel Pro 模式：无法获取账号 ID，但允许处理{post_type}消息")
+                    # 即使无法获取账号 ID，也允许处理消息，避免完全忽略消息
+                    return True
             
             # 只处理群消息的优先级判断
             if post_type == 'message' and event.get('message_type') == 'group':
@@ -128,7 +112,7 @@ class AccountManager:
                         else:
                             logger.debug(f"Parallel Pro 模式：账号 {account_id} 是群 {group_id} 中最高优先级的活跃账号，处理消息")
             
-            # 其他消息类型或无法判断时，允许处理
+            # 其他消息类型（私聊消息等）允许处理
             return True
         
         # Parallel 模式下，处理所有来自已知账号的消息
@@ -136,10 +120,10 @@ class AccountManager:
             self_id = event.get('self_id')
             account = self.get_account_by_qq(str(self_id))
             if account:
-                logger.debug(f"Parallel 模式: 处理账号 {self_id} 的{post_type}消息")
+                logger.debug(f"Parallel 模式：处理账号 {self_id} 的{post_type}消息")
                 return True
             else:
-                logger.debug(f"Parallel 模式: 忽略未知账号 {self_id} 的{post_type}消息")
+                logger.debug(f"Parallel 模式：忽略未知账号 {self_id} 的{post_type}消息")
                 return False
             
         # Fallback 模式下，检查是否来自当前活跃账号
@@ -148,7 +132,7 @@ class AccountManager:
         if active_account:
             active_qq = active_account.get('bot_qq')
             if str(self_id) != str(active_qq):
-                logger.debug(f"忽略非活跃账号 {self_id} 的{post_type}消息，当前活跃账号: {active_qq}")
+                logger.debug(f"忽略非活跃账号 {self_id} 的{post_type}消息，当前活跃账号：{active_qq}")
                 return False
             else:
                 logger.debug(f"处理活跃账号 {self_id} 的{post_type}消息")
