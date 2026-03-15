@@ -73,6 +73,25 @@ class PluginContext:
             self.logger.error(f"发送私聊消息失败: {e}")
             return None
     
+    async def send_group_forward_msg(self, group_id: str, messages: list) -> Optional[dict]:
+        """发送群转发消息（受控接口）
+        
+        Args:
+            group_id: 群ID
+            messages: 消息节点列表
+            
+        Returns:
+            API响应结果
+        """
+        try:
+            return await self.call_api('send_group_forward_msg', {
+                'group_id': group_id,
+                'messages': messages
+            })
+        except Exception as e:
+            self.logger.error(f"发送群转发消息失败: {e}")
+            return None
+    
     async def call_api(self, action: str, params: dict) -> dict:
         """调用 OneBot API（受控接口）
         
