@@ -33,16 +33,7 @@ class MessageRouter:
         # 插件管理器（稍后在 bot.py 中初始化）
         self.plugin_manager = None
     
-    async def forward_message_to_subbots(self, message: str):
-        """将消息转发给所有子机器人"""
-        if hasattr(self.context, 'subbot_manager'):
-            subbot_manager = self.context.subbot_manager
-            if hasattr(subbot_manager, 'forwarders'):
-                for forwarder in subbot_manager.forwarders.values():
-                    try:
-                        await forwarder.send_to_subbots(message)
-                    except Exception as e:
-                        logger.error(f"转发消息给子机器人失败: {e}")
+
 
 
     
@@ -76,14 +67,13 @@ class MessageRouter:
                     if is_parallel:
                         # Parallel 模式下，处理所有来自已知账号的消息
                         logger.debug(f"Parallel 模式: 处理账号 {account_id} 的消息")
-                        # 转发消息给子机器人
-                        await self.forward_message_to_subbots(msg.data)
+
                     else:
                         # Fallback 模式下，只处理活跃账号的消息
                         if hasattr(multi_ws_manager, 'active_connection_id'):
                             active_conn_id = multi_ws_manager.active_connection_id
                             if account_id == active_conn_id:
-                                await self.forward_message_to_subbots(msg.data)
+                                pass
                             else:
                                 logger.debug(f"忽略非活跃账号 {account_id} 的消息")
                 

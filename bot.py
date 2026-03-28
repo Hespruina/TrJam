@@ -121,7 +121,7 @@ from core.config_manager import load_config
 from core.config_watcher import config_watcher
 from core.multi_websocket_manager import MultiWebSocketManager
 from core.message_router import MessageRouter
-from core.subbot_manager import SubBotManager
+
 
 # ---------------------- 命令系统 ----------------------
 from commands.command_dispatcher import initialize_command_mappings
@@ -173,13 +173,7 @@ async def main():
     # 将多连接管理器添加到上下文中（通过自定义属性）
     setattr(context, 'multi_ws_manager', multi_websocket_manager)
     
-    # 设置连接成功回调函数，当主机器人连接成功时启动子机器人管理器
-    async def on_connection_success():
-        logger.info("主机器人连接成功，启动子机器人管理器")
-        if hasattr(context, 'subbot_manager'):
-            await context.subbot_manager.start()
-    
-    multi_websocket_manager.set_connection_success_callback(on_connection_success)
+
 
     # 6. 创建消息路由器
     message_router = MessageRouter(context)
@@ -198,17 +192,7 @@ async def main():
     loaded_count = sum(1 for success in load_results.values() if success)
     logger.info(f"插件加载完成: 成功 {loaded_count}/{len(load_results)}")
 
-    # 7. 初始化子机器人管理器（暂不启动，等待主机器人连接成功后再启动）
-    # 这里需要根据实际的主机器人WebSocket URL和token进行配置
-    # 假设主机器人的WebSocket服务在本地8080端口
-    parent_ws_url = "ws://127.0.0.1:8080"
-    parent_token = "main_bot_token"  # 实际使用时应该从配置中读取
-    
-    subbot_manager = SubBotManager(parent_ws_url, parent_token)
-    subbot_manager.context = context  # 设置上下文对象
-    setattr(context, 'subbot_manager', subbot_manager)
-    
-    # 注意：子机器人管理器将在主机器人连接成功后通过回调启动
+
 
     # 8. 启动HTTP服务（已移至D-Cloud插件中处理）
     # await start_http_servers(context, message_router.handle_http_request)
@@ -294,12 +278,7 @@ async def main():
                 except Exception as e:
                     logger.error(f"取消任务时发生错误: {e}", exc_info=True)
         
-        # 停止子机器人管理器
-        if hasattr(context, 'subbot_manager'):
-            try:
-                await context.subbot_manager.stop()
-            except Exception as e:
-                logger.error(f"停止子机器人管理器时发生错误: {e}")
+
         
         # 停止配置监控
         config_watcher.stop()

@@ -210,8 +210,7 @@ class ConsoleHandler:
             self._show_help()
         elif command.startswith("ws send "):
             await self._handle_ws_send(command)
-        elif command.startswith("sub "):
-            await self._handle_sub(command)
+
         elif command.startswith("plugin ") or command.startswith("pl "):
             await self._handle_plugin(command)
         else:
@@ -329,156 +328,9 @@ class ConsoleHandler:
         except Exception as e:
             logger.error(f"处理ws send命令时出错: {e}")
     
-    async def _handle_sub(self, command: str):
-        """处理sub系列命令"""
-        try:
-            # 解析命令
-            parts = command.split()
-            if len(parts) < 2:
-                print("\n命令格式错误: sub 后面需要接子命令")
-                print("可用子命令: list, load, unload, reload")
-                return
-            
-            sub_cmd = parts[1]
-            
-            # 检查是否有subbot_manager
-            if not self.context or not hasattr(self.context, 'subbot_manager'):
-                print("\n错误: 子机器人管理器未初始化")
-                return
-            
-            subbot_manager = self.context.subbot_manager
-            
-            if sub_cmd == "list":
-                await self._handle_sub_list(subbot_manager)
-            elif sub_cmd == "unload":
-                if len(parts) < 3:
-                    print("\n命令格式错误: sub unload 后面需要接子系统名称")
-                    return
-                sub_name = parts[2]
-                await self._handle_sub_unload(subbot_manager, sub_name)
-            elif sub_cmd == "load":
-                if len(parts) < 3:
-                    print("\n命令格式错误: sub load 后面需要接子系统名称")
-                    return
-                sub_name = parts[2]
-                await self._handle_sub_load(subbot_manager, sub_name)
-            elif sub_cmd == "reload":
-                if len(parts) < 3:
-                    print("\n命令格式错误: sub reload 后面需要接子系统名称")
-                    return
-                sub_name = parts[2]
-                await self._handle_sub_reload(subbot_manager, sub_name)
-            elif sub_cmd == "info":
-                if len(parts) < 3:
-                    print("\n命令格式错误: sub info 后面需要接子系统名称")
-                    return
-                sub_name = parts[2]
-                await self._handle_sub_info(subbot_manager, sub_name)
-            else:
-                print(f"\n未知子命令: {sub_cmd}")
-                print("可用子命令: list, load, unload, reload, info")
-        except Exception as e:
-            logger.error(f"处理sub命令时发生错误: {str(e)}")
-            print(f"\n处理命令时发生错误: {str(e)}")
 
-    async def _handle_sub_list(self, subbot_manager):
-        """处理sub list命令"""
-        import os
-        print("\n正在扫描子系统列表和运行状态...")
-        
-        # 实时扫描子系统目录
-        subsystem_dir = os.path.join(os.path.dirname(__file__), '..', 'subbot')
-        available_subsystems = []
-        
-        if os.path.exists(subsystem_dir):
-            for item in os.listdir(subsystem_dir):
-                item_path = os.path.join(subsystem_dir, item)
-                if os.path.isdir(item_path) and os.path.exists(os.path.join(item_path, "__init__.py")):
-                    available_subsystems.append(item)
-        
-        # 获取当前运行的子系统
-        running_subsystems = subbot_manager.get_subbots()
-        subbot_metadata = getattr(subbot_manager, 'get_all_subbot_metadata', lambda: {})()
-        
-        # 显示结果
-        print("\n子系统列表及运行状态:")
-        print("-" * 60)
-        
-        if not available_subsystems:
-            print("  未发现可用的子系统")
-        else:
-            for sub_name in available_subsystems:
-                # 获取状态信息
-                status = "🟢 运行中" if sub_name in running_subsystems else "🔴 未运行"
-                
-                # 获取元数据信息（如果可用）
-                metadata = subbot_metadata.get(sub_name, {})
-                version = metadata.get('version', 'N/A')
-                description = metadata.get('description', '无描述')
-                author = metadata.get('author', '未知')
-                
-                print(f"  🤖 {sub_name} (v{version})")
-                print(f"     状态: {status}")
-                print(f"     描述: {description}")
-                print(f"     作者: {author}")
-                print()
-        print("-" * 60)
 
-    async def _handle_sub_unload(self, subbot_manager, sub_name):
-        """处理sub unload命令"""
-        print(f"\n正在停止子系统: {sub_name}...")
-        
-        # 检查子系统是否运行
-        running_subsystems = subbot_manager.get_subbots()
-        if sub_name not in running_subsystems:
-            print(f"  子系统 {sub_name} 未运行")
-            return
-        
-        # 停止子系统
-        await subbot_manager.stop_subbot(sub_name)
-        print(f"  子系统 {sub_name} 已成功停止")
 
-    async def _handle_sub_load(self, subbot_manager, sub_name):
-        """处理sub load命令"""
-        import os
-        print(f"\n正在加载子系统: {sub_name}...")
-        
-        # 检查子系统是否存在
-        subsystem_dir = os.path.join(os.path.dirname(__file__), '..', 'subbot', sub_name)
-        if not os.path.exists(subsystem_dir) or not os.path.exists(os.path.join(subsystem_dir, "__init__.py")):
-            print(f"  子系统 {sub_name} 不存在")
-            return
-        
-        # 检查子系统是否已运行
-        running_subsystems = subbot_manager.get_subbots()
-        if sub_name in running_subsystems:
-            print(f"  子系统 {sub_name} 已经在运行")
-            return
-        
-        # 加载子系统
-        await subbot_manager.load_subbot(sub_name)
-        print(f"  子系统 {sub_name} 已成功加载")
-
-    async def _handle_sub_reload(self, subbot_manager, sub_name):
-        """处理sub reload命令"""
-        import os
-        print(f"\n正在重载子系统: {sub_name}...")
-        
-        # 检查子系统是否存在
-        subsystem_dir = os.path.join(os.path.dirname(__file__), '..', 'subbot', sub_name)
-        if not os.path.exists(subsystem_dir) or not os.path.exists(os.path.join(subsystem_dir, "__init__.py")):
-            print(f"  子系统 {sub_name} 不存在")
-            return
-        
-        # 停止子系统（如果运行中）
-        running_subsystems = subbot_manager.get_subbots()
-        if sub_name in running_subsystems:
-            await subbot_manager.stop_subbot(sub_name)
-            print(f"  已停止子系统 {sub_name}")
-        
-        # 重新加载子系统
-        await subbot_manager.load_subbot(sub_name)
-        print(f"  子系统 {sub_name} 已成功重载")
 
     async def _handle_plugin(self, command: str):
         """处理plugin系列命令"""
@@ -689,11 +541,6 @@ class ConsoleHandler:
         print("  log <级别>       - 切换日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL)")
         print("  restart/rst      - 立即重启机器人")
         print("  ws send <json>   - 发送HTTP API消息")
-        print("  sub list         - 查看子系统列表和运行状态")
-        print("  sub load <name>  - 动态加载子系统")
-        print("  sub unload <name> - 停止子系统")
-        print("  sub reload <name> - 重载子系统")
-        print("  sub info <name>  - 查看子系统详细信息")
         print("  plugin list      - 查看插件列表和运行状态")
         print("  plugin load <name> - 加载插件")
         print("  plugin unload <name> - 卸载插件")
@@ -704,8 +551,6 @@ class ConsoleHandler:
         print()
         print("示例:")
         print("  ws send {\"action\":\"get_stranger_info\",\"params\":{\"user_id\":123456789}}")
-        print("  sub list")
-        print("  sub load example_bot")
         print("  plugin list")
         print("  plugin load example_plugin")
     
