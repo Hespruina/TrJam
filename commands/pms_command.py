@@ -9,8 +9,11 @@ logger = get_logger("PmsCommand")
 
 async def handle_pms_command(context: BotContext, args: list, user_id: str, group_id: str, **kwargs) -> str:
     """处理 /pms 命令，管理群管理员"""
+    # 获取账号 ID（parallel 模式下使用）
+    account_id = kwargs.get('account_id')
+    
     if len(args) < 1:
-        return "❌ 参数错误，格式：/pms [add/remove/list] [@用户或QQ号]"
+        return "❌ 参数错误，格式：/pms [add/remove/list] [@用户或 QQ 号]"
 
     action = args[0].lower()
     if action not in ["add", "remove", "list"]:
@@ -27,7 +30,7 @@ async def handle_pms_command(context: BotContext, args: list, user_id: str, grou
         admin_list = []
         for admin_id in permissions['Admin']:
             from utils.user_utils import get_user_nickname
-            nickname = await get_user_nickname(context, admin_id)
+            nickname = await get_user_nickname(context, admin_id, account_id=account_id)
             admin_list.append(f"{nickname}({admin_id})" if nickname else admin_id)
         
         return f"🔑 当前管理员列表:\n" + "\n".join([f"  {i+1}. {admin}" for i, admin in enumerate(admin_list)])

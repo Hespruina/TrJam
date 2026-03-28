@@ -131,7 +131,7 @@ async def _handle_group_invite(context: BotContext, user_id: str, group_name: st
         
         # 获取邀请人昵称
         from utils.user_utils import get_user_nickname
-        inviter_nickname = await get_user_nickname(context, user_id)
+        inviter_nickname = await get_user_nickname(context, user_id, account_id=account_id)
         
         # 向report群发送日志
         report_group_id = context.get_config_value("report_group")

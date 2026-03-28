@@ -57,6 +57,11 @@ async def _handle_group_decrease(context: BotContext, event: dict):
     user_id = event.get('user_id', '')
     operator_id = event.get('operator_id', '')
     sub_type = event.get('sub_type', '')
+    
+    # 获取账号 ID（parallel-pro 模式）
+    account_id = event.get('_account_id')
+    if account_id:
+        logger.debug(f"退群事件来自账号 ID: {account_id}")
 
     # 检查是否启用了退群推送功能
     group_config_path = f"data/group_config/{group_id}.json"
@@ -66,7 +71,7 @@ async def _handle_group_decrease(context: BotContext, event: dict):
             with open(group_config_path, 'r', encoding='utf-8') as f:
                 group_toggle_config = json.load(f)
         except Exception as e:
-            logger.error(f"读取群组配置文件失败: {e}")
+            logger.error(f"读取群组配置文件失败：{e}")
 
     # 检查是否启用了 group_exit 功能
     group_exit_enabled = group_toggle_config.get("group_exit_enabled", False)
@@ -78,12 +83,12 @@ async def _handle_group_decrease(context: BotContext, event: dict):
     group_config = context.get_group_config(str(group_id))
     api_base = group_config.get("api_base", "") if group_config else ""
 
-    user_nickname = await get_user_nickname(context, user_id)
+    user_nickname = await get_user_nickname(context, user_id, account_id=account_id)
     if sub_type == 'leave':
         notice_msg = f"{user_nickname}（{user_id}）退出群聊。"
         logger.info(f"用户 {user_id}({user_nickname}) 主动退出群 {group_id}")
     elif sub_type == 'kick':
-        operator_nickname = await get_user_nickname(context, operator_id)
+        operator_nickname = await get_user_nickname(context, operator_id, account_id=account_id)
         notice_msg = f"{operator_nickname}（{operator_id}）将{user_nickname}（{user_id}）移出了群聊。"
         logger.info(f"用户 {user_id}({user_nickname}) 被 {operator_id}({operator_nickname}) 踢出群 {group_id}")
     else:
@@ -106,14 +111,19 @@ async def _handle_group_upload(context: BotContext, event: dict):
     user_id = event.get('user_id', '')
     file_info = event.get('file', {})
     
+    # 获取账号 ID（parallel-pro 模式）
+    account_id = event.get('_account_id')
+    if account_id:
+        logger.debug(f"文件上传事件来自账号 ID: {account_id}")
+    
     file_name = file_info.get('name', '未知文件')
     file_size = file_info.get('size', 0)
     file_id = file_info.get('id', '')
     
-    logger.info(f"群 {group_id} 中用户 {user_id} 上传了文件: {file_name}")
+    logger.info(f"群 {group_id} 中用户 {user_id} 上传了文件：{file_name}")
     
     # 获取用户昵称
-    user_nickname = await get_user_nickname(context, user_id)
+    user_nickname = await get_user_nickname(context, user_id, account_id=account_id)
     
     # 记录文件上传日志，但不发送消息到群聊
     file_size_mb = file_size / (1024 * 1024)  # 转换为MB
@@ -131,6 +141,11 @@ async def _handle_poke_event(context: BotContext, event: dict):
     group_id = event.get('group_id')
     user_id = event.get('user_id', '')
     target_id = event.get('target_id', '')
+    
+    # 获取账号 ID（parallel-pro 模式）
+    account_id = event.get('_account_id')
+    if account_id:
+        logger.debug(f"戳一戳事件来自账号 ID: {account_id}")
     
     bot_qq = str(context.get_config_value('bot_qq', ''))
     
@@ -170,7 +185,7 @@ async def _handle_poke_event(context: BotContext, event: dict):
     poke_count = len(poke_records[group_id][user_id])
     
     # 获取用户昵称
-    user_nickname = await get_user_nickname(context, user_id)
+    user_nickname = await get_user_nickname(context, user_id, account_id=account_id)
     
     # 最多只戳回去3次
     if poke_count <= 3:
@@ -213,7 +228,12 @@ async def _handle_group_increase(context: BotContext, event: dict):
     user_id = event.get('user_id', '')
     self_id = event.get('self_id', '')
     
-    # 获取机器人QQ号
+    # 获取账号 ID（parallel-pro 模式）
+    account_id = event.get('_account_id')
+    if account_id:
+        logger.debug(f"群成员增加事件来自账号 ID: {account_id}")
+    
+    # 获取机器人 QQ 号
     bot_qq = str(context.get_config_value('bot_qq', ''))
     
     # 检查新加入的成员是否是机器人自己
