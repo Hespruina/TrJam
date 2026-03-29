@@ -196,14 +196,17 @@ async def handle_ask_command(context: BotContext, args: list, user_id: str, grou
     """
     处理 /ask 命令，使用答案之书回答问题
     
-    :param context: 机器人上下文，包含配置和WebSocket
+    :param context: 机器人上下文，包含配置和 WebSocket
     :param args: 命令参数列表（已去除命令名）
-    :param user_id: 触发命令的用户QQ号
+    :param user_id: 触发命令的用户 QQ 号
     :param group_id: 触发命令的群号
     :param kwargs: 其他可能的参数
-    :return: CommandResponse对象，包含要发送的响应
+    :return: CommandResponse 对象，包含要发送的响应
     """
     logger.info(f"用户 {user_id} 在群 {group_id} 执行了 /ask 命令")
+    
+    # 获取账号 ID（parallel 模式下使用）
+    account_id = kwargs.get('account_id')
     
     # 检查是否提供了问题
     if not args:
@@ -220,9 +223,9 @@ async def handle_ask_command(context: BotContext, args: list, user_id: str, grou
     
     async def processing_callback(message_id: str):
         if message_id:
-            # 启动后台任务处理答案查询，并传递处理中消息的ID
+            # 启动后台任务处理答案查询，并传递处理中消息的 ID 和账号 ID
             create_monitored_task(
-                process_ask_request(context, question, user_id, group_id, message_id),
+                process_ask_request(context, question, user_id, group_id, message_id, account_id),
                 name=f"AskCommand_process_{user_id}_{group_id}"
             )
     
@@ -231,10 +234,10 @@ async def handle_ask_command(context: BotContext, args: list, user_id: str, grou
     # 发送处理中提示
     await processing_builder.send()
     
-    # 返回none表示已经通过builder发送了消息
+    # 返回 none 表示已经通过 builder 发送了消息
     return CommandResponse.none()
 
-async def process_ask_request(context: BotContext, question: str, user_id: str, group_id: str, processing_message_id: str):
+async def process_ask_request(context: BotContext, question: str, user_id: str, group_id: str, processing_message_id: str, account_id: int = None):
     """
     在后台处理ask请求的耗时操作
     
@@ -327,34 +330,34 @@ async def process_ask_request(context: BotContext, question: str, user_id: str, 
             await builder.send()
         
         # 撤回处理中提示消息
-        await try_recall_processing_message(context, processing_message_id)
+        await try_recall_processing_message(context, processing_message_id, account_id)
         
     except Exception as e:
-        logger.error(f"处理ask命令时发生错误: {str(e)}")
+        logger.error(f"处理 ask 命令时发生错误：{str(e)}")
         # 发送错误消息
         error_builder = MessageBuilder(context)
         error_builder.set_group_id(group_id)
         error_builder.set_user_id(user_id)
         error_builder.add_at()
-        error_builder.add_text(f"\n❌ 处理请求时发生错误: {str(e)}")
+        error_builder.add_text(f"\n❌ 处理请求时发生错误：{str(e)}")
         
         await error_builder.send()
         
         # 撤回处理中提示消息
-        await try_recall_processing_message(context, processing_message_id)
+        await try_recall_processing_message(context, processing_message_id, account_id)
 
-async def try_recall_processing_message(context: BotContext, processing_message_id: str) -> None:
+async def try_recall_processing_message(context: BotContext, processing_message_id: str, account_id: int = None) -> None:
     """尝试撤回处理中提示消息"""
     try:
         # 等待一段时间确保消息发送完成
         await asyncio.sleep(1)
         
-        # 调用API撤回消息
-        from utils.api_utils import call_onebot_api
+        # 调用 API 撤回消息
         result = await call_onebot_api(
             context=context,
             action="delete_msg",
-            params={"message_id": processing_message_id}
+            params={"message_id": processing_message_id},
+            account_id=account_id
         )
         
         if not (result and result.get("success")):

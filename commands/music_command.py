@@ -33,6 +33,8 @@ async def handle_music_command(context: BotContext, args: list, user_id: str, gr
     - /music <数字编号>                 → 播放最近一次搜索结果中的歌曲
     """
     try:
+        account_id = kwargs.get('account_id')
+        
         if not args:
             return CommandResponse.text("❌ 请提供歌名、平台代码或歌曲编号")
 
@@ -58,9 +60,9 @@ async def handle_music_command(context: BotContext, args: list, user_id: str, gr
             
             async def processing_callback(message_id: str):
                 if message_id:
-                    # 启动后台任务处理歌曲播放，并传递处理中消息的ID
+                    # 启动后台任务处理歌曲播放，并传递处理中消息的 ID 和账号 ID
                     create_monitored_task(
-                        play_selected_song(context, user_id, group_id, songs[song_index], result["platform"], message_id),
+                        play_selected_song(context, user_id, group_id, songs[song_index], result["platform"], message_id, account_id),
                         name=f"MusicCommand_play_{user_id}_{group_id}"
                     )
             
@@ -88,9 +90,9 @@ async def handle_music_command(context: BotContext, args: list, user_id: str, gr
             
             async def processing_callback(message_id: str):
                 if message_id:
-                    # 启动后台任务处理搜索，并传递处理中消息的ID
+                    # 启动后台任务处理搜索，并传递处理中消息的 ID 和账号 ID
                     create_monitored_task(
-                        do_search(context, user_id, group_id, keyword, platform, message_id),
+                        do_search(context, user_id, group_id, keyword, platform, message_id, account_id),
                         name=f"MusicCommand_search_{user_id}_{group_id}"
                     )
             
@@ -99,10 +101,10 @@ async def handle_music_command(context: BotContext, args: list, user_id: str, gr
             # 发送处理中提示
             await processing_builder.send()
             
-            # 返回none表示已经通过builder发送了消息
+            # 返回 none 表示已经通过 builder 发送了消息
             return CommandResponse.none()
 
-        # 情况3: /music <平台代码> <歌名>
+        # 情况 3: /music <平台代码> <歌名>
         if len(args) >= 2 and first_arg in ['n', 'g', 'q']:
             keyword = ' '.join(args[1:])
             platform = {'n': 'netease', 'g': 'gequbao', 'q': 'qq'}[first_arg]
@@ -116,9 +118,9 @@ async def handle_music_command(context: BotContext, args: list, user_id: str, gr
             
             async def processing_callback(message_id: str):
                 if message_id:
-                    # 启动后台任务处理搜索，并传递处理中消息的ID
+                    # 启动后台任务处理搜索，并传递处理中消息的 ID 和账号 ID
                     create_monitored_task(
-                        do_search(context, user_id, group_id, keyword, platform, message_id),
+                        do_search(context, user_id, group_id, keyword, platform, message_id, account_id),
                         name=f"MusicCommand_search_{user_id}_{group_id}"
                     )
             
@@ -127,10 +129,10 @@ async def handle_music_command(context: BotContext, args: list, user_id: str, gr
             # 发送处理中提示
             await processing_builder.send()
             
-            # 返回none表示已经通过builder发送了消息
+            # 返回 none 表示已经通过 builder 发送了消息
             return CommandResponse.none()
 
-        # 情况4: /music <歌名>
+        # 情况 4: /music <歌名>
         keyword = ' '.join(args)
         
         # 发送处理中提示并保存消息ID
@@ -142,9 +144,9 @@ async def handle_music_command(context: BotContext, args: list, user_id: str, gr
         
         async def processing_callback(message_id: str):
             if message_id:
-                # 启动后台任务处理平台选择提示，并传递处理中消息的ID
+                # 启动后台任务处理平台选择提示，并传递处理中消息的 ID 和账号 ID
                 create_monitored_task(
-                    prompt_platform_choice(context, user_id, group_id, keyword, message_id),
+                    prompt_platform_choice(context, user_id, group_id, keyword, message_id, account_id),
                     name=f"MusicCommand_prompt_{user_id}_{group_id}"
                 )
         
@@ -160,7 +162,7 @@ async def handle_music_command(context: BotContext, args: list, user_id: str, gr
         logger.error(f"处理音乐命令异常: {e}")
         return CommandResponse.text(f"❌ 处理音乐命令失败: {str(e)}")
 
-async def prompt_platform_choice(context: BotContext, user_id: str, group_id: str, keyword: str, processing_message_id: str) -> None:
+async def prompt_platform_choice(context: BotContext, user_id: str, group_id: str, keyword: str, processing_message_id: str, account_id: int = None) -> None:
     """提示用户选择平台"""
     cache_key = f"{group_id}_{user_id}"
     user_search_keywords[cache_key] = keyword
@@ -172,23 +174,23 @@ async def prompt_platform_choice(context: BotContext, user_id: str, group_id: st
     builder.add_text(f"\n🎵 搜索歌曲：{keyword}\n")
     builder.add_text("请选择音乐平台：\n")
     builder.add_text("• /music n — 网易云音乐\n")
-    builder.add_text("• /music g — Gequbao免费音乐\n")
-    builder.add_text("• /music q — QQ音乐\n")
-    builder.add_text("\n20秒后自动撤回")
-    builder.set_auto_recall(20)  # 设置20秒后自动撤回
+    builder.add_text("• /music g — Gequbao 免费音乐\n")
+    builder.add_text("• /music q — QQ 音乐\n")
+    builder.add_text("\n20 秒后自动撤回")
+    builder.set_auto_recall(20)  # 设置 20 秒后自动撤回
 
     await builder.send()
     
     # 撤回处理中提示消息
-    await try_recall_processing_message(context, processing_message_id)
+    await try_recall_processing_message(context, processing_message_id, account_id)
 
-async def do_search(context: BotContext, user_id: str, group_id: str, keyword: str, platform: str, processing_message_id: str) -> None:
+async def do_search(context: BotContext, user_id: str, group_id: str, keyword: str, platform: str, processing_message_id: str, account_id: int = None) -> None:
     """执行搜索"""
     cache_key = f"{group_id}_{user_id}"
     platform_names = {
         'netease': '网易云音乐',
-        'gequbao': 'Gequbao免费音乐',
-        'qq': 'QQ音乐'
+        'gequbao': 'Gequbao 免费音乐',
+        'qq': 'QQ 音乐'
     }
     platform_name = platform_names.get(platform, platform)
 
@@ -200,11 +202,11 @@ async def do_search(context: BotContext, user_id: str, group_id: str, keyword: s
     status_builder.set_user_id(user_id)
     status_builder.add_at()
     status_builder.add_text(f"\n🔍 正在{platform_name}搜索 '{keyword}'，请稍候...")
-    status_builder.set_auto_recall(20)  # 设置20秒后自动撤回
+    status_builder.set_auto_recall(20)  # 设置 20 秒后自动撤回
     await status_builder.send()
     
     # 撤回处理中提示消息
-    await try_recall_processing_message(context, processing_message_id)
+    await try_recall_processing_message(context, processing_message_id, account_id)
 
     try:
         loop = asyncio.get_event_loop()
@@ -224,7 +226,7 @@ async def do_search(context: BotContext, user_id: str, group_id: str, keyword: s
             await error_builder.send()
             
             # 撤回处理中提示消息
-            await try_recall_processing_message(context, processing_message_id)
+            await try_recall_processing_message(context, processing_message_id, account_id)
             return
 
         songs = result.get('songs', [])
@@ -237,7 +239,7 @@ async def do_search(context: BotContext, user_id: str, group_id: str, keyword: s
             await error_builder.send()
             
             # 撤回处理中提示消息
-            await try_recall_processing_message(context, processing_message_id)
+            await try_recall_processing_message(context, processing_message_id, account_id)
             return
 
         # 缓存结果（覆盖之前的）
@@ -260,28 +262,28 @@ async def do_search(context: BotContext, user_id: str, group_id: str, keyword: s
         await res_builder.send()
         
         # 撤回处理中提示消息
-        await try_recall_processing_message(context, processing_message_id)
+        await try_recall_processing_message(context, processing_message_id, account_id)
 
     except Exception as e:
-        logger.error(f"搜索异常: {e}")
+        logger.error(f"搜索异常：{e}")
         error_builder = MessageBuilder(context)
         error_builder.set_group_id(group_id)
         error_builder.set_user_id(user_id)
         error_builder.add_at()
-        error_builder.add_text(f"\n❌ 搜索失败: {str(e)}")
+        error_builder.add_text(f"\n❌ 搜索失败：{str(e)}")
         await error_builder.send()
         
         # 撤回处理中提示消息
-        await try_recall_processing_message(context, processing_message_id)
+        await try_recall_processing_message(context, processing_message_id, account_id)
     finally:
         # 状态消息已通过 set_auto_recall 自动撤回
         pass
 
-async def play_selected_song(context: BotContext, user_id: str, group_id: str, song_info: dict, platform: str, processing_message_id: str) -> None:
+async def play_selected_song(context: BotContext, user_id: str, group_id: str, song_info: dict, platform: str, processing_message_id: str, account_id: int = None) -> None:
     """播放选中的歌曲"""
     try:
         # 撤回处理中提示消息
-        await try_recall_processing_message(context, processing_message_id)
+        await try_recall_processing_message(context, processing_message_id, account_id)
         
         cache_key = f"{group_id}_{user_id}"
         platform_names = {
@@ -420,18 +422,18 @@ async def safe_recall_message(context, message_id):
     except Exception as e:
         logger.warning(f"撤回消息异常: {e}")
 
-async def try_recall_processing_message(context: BotContext, processing_message_id: str) -> None:
+async def try_recall_processing_message(context: BotContext, processing_message_id: str, account_id: int = None) -> None:
     """尝试撤回处理中提示消息"""
     try:
         # 等待一段时间确保消息发送完成
         await asyncio.sleep(1)
         
-        # 调用API撤回消息
-        from utils.api_utils import call_onebot_api
+        # 调用 API 撤回消息
         result = await call_onebot_api(
             context=context,
             action="delete_msg",
-            params={"message_id": processing_message_id}
+            params={"message_id": processing_message_id},
+            account_id=account_id
         )
         
         if not (result and result.get("success")):

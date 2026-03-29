@@ -207,17 +207,20 @@ async def handle_bapic_command(context: BotContext, args: list, user_id: str, gr
     """
     处理 /bapic 命令，随机发送一张蔚蓝档案图片
     
-    :param context: 机器人上下文，包含配置和WebSocket
+    :param context: 机器人上下文，包含配置和 WebSocket
     :param args: 命令参数列表（已去除命令名）
-    :param user_id: 触发命令的用户QQ号
+    :param user_id: 触发命令的用户 QQ 号
     :param group_id: 触发命令的群号
     :param server_name: 当前服务器名称
-    :param kwargs: 其他可能的参数（如nickname、api_base、cmd_config、user_level等）
-    :return: CommandResponse对象，包含要发送的响应
+    :param kwargs: 其他可能的参数（如 nickname、api_base、cmd_config、user_level 等）
+    :return: CommandResponse 对象，包含要发送的响应
     """
     logger.info(f"用户 {user_id} 在群 {group_id} 执行了 /bapic 命令")
     
-    # 发送处理中提示并保存消息ID
+    # 获取账号 ID（parallel 模式下使用）
+    account_id = kwargs.get('account_id')
+    
+    # 发送处理中提示并保存消息 ID
     processing_builder = MessageBuilder(context)
     processing_builder.set_group_id(group_id)
     processing_builder.set_user_id(user_id)
@@ -226,9 +229,9 @@ async def handle_bapic_command(context: BotContext, args: list, user_id: str, gr
     
     async def processing_callback(message_id: str):
         if message_id:
-            # 启动后台任务处理图片获取，并传递处理中消息的ID
+            # 启动后台任务处理图片获取，并传递处理中消息的 ID 和账号 ID
             create_monitored_task(
-                process_bapic_request(context, args, user_id, group_id, message_id, **kwargs),
+                process_bapic_request(context, args, user_id, group_id, message_id, account_id, **kwargs),
                 name=f"BapicCommand_process_{user_id}_{group_id}"
             )
     
@@ -240,7 +243,7 @@ async def handle_bapic_command(context: BotContext, args: list, user_id: str, gr
     # 返回None表示已经通过builder发送了消息
     return CommandResponse.none()
 
-async def process_bapic_request(context: BotContext, args: list, user_id: str, group_id: str, processing_message_id: str, **kwargs) -> None:
+async def process_bapic_request(context: BotContext, args: list, user_id: str, group_id: str, processing_message_id: str, account_id: int = None, **kwargs) -> None:
     """在后台处理蔚蓝档案图片请求"""
     # 获取用户昵称
     nickname = kwargs.get('nickname', f"用户{user_id[-4:]}")
@@ -264,10 +267,10 @@ async def process_bapic_request(context: BotContext, args: list, user_id: str, g
         await builder.send()
         
         # 尝试撤回处理中提示消息
-        await try_recall_processing_message(context, processing_message_id)
+        await try_recall_processing_message(context, processing_message_id, account_id)
         
     except Exception as e:
-        logger.error(f"获取蔚蓝档案图片失败: {e}")
+        logger.error(f"获取蔚蓝档案图片失败：{e}")
         error_builder = MessageBuilder(context)
         error_builder.set_group_id(group_id)
         error_builder.set_user_id(user_id)
@@ -276,20 +279,20 @@ async def process_bapic_request(context: BotContext, args: list, user_id: str, g
         await error_builder.send()
         
         # 尝试撤回处理中提示消息
-        await try_recall_processing_message(context, processing_message_id)
+        await try_recall_processing_message(context, processing_message_id, account_id)
 
-async def try_recall_processing_message(context: BotContext, processing_message_id: str) -> None:
+async def try_recall_processing_message(context: BotContext, processing_message_id: str, account_id: int = None) -> None:
     """尝试撤回处理中提示消息"""
     try:
         # 等待一段时间确保消息发送完成
         await asyncio.sleep(1)
         
-        # 调用API撤回消息
-        from utils.api_utils import call_onebot_api
+        # 调用 API 撤回消息
         result = await call_onebot_api(
             context=context,
             action="delete_msg",
-            params={"message_id": processing_message_id}
+            params={"message_id": processing_message_id},
+            account_id=account_id
         )
         
         if not (result and result.get("success")):

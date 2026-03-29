@@ -348,7 +348,10 @@ async def handle_jrys_command(context: BotContext, args: list, user_id: str, gro
     """
     logger.info(f"用户 {user_id} 在群 {group_id} 执行了 /jrys 命令")
     
-    # 发送处理中提示并保存消息ID
+    # 获取账号 ID（parallel 模式下使用）
+    account_id = kwargs.get('account_id')
+    
+    # 发送处理中提示并保存消息 ID
     processing_builder = MessageBuilder(context)
     processing_builder.set_group_id(group_id)
     processing_builder.set_user_id(user_id)
@@ -357,9 +360,9 @@ async def handle_jrys_command(context: BotContext, args: list, user_id: str, gro
     
     async def processing_callback(message_id: str):
         if message_id:
-            # 启动后台任务处理运势查询，并传递处理中消息的ID
+            # 启动后台任务处理运势查询，并传递处理中消息的 ID 和账号 ID
             create_monitored_task(
-                process_jrys_request(context, args, user_id, group_id, message_id, **kwargs),
+                process_jrys_request(context, args, user_id, group_id, message_id, account_id, **kwargs),
                 name=f"JrysCommand_process_{user_id}_{group_id}"
             )
     
@@ -371,7 +374,7 @@ async def handle_jrys_command(context: BotContext, args: list, user_id: str, gro
     # 返回None表示已经通过builder发送了消息
     return CommandResponse.none()
 
-async def process_jrys_request(context: BotContext, args: list, user_id: str, group_id: str, processing_message_id: str, **kwargs) -> None:
+async def process_jrys_request(context: BotContext, args: list, user_id: str, group_id: str, processing_message_id: str, account_id: int = None, **kwargs) -> None:
     """在后台处理今日运势请求"""
     # 获取用户昵称
     nickname = kwargs.get('nickname', f"用户{user_id[-4:]}")
@@ -407,10 +410,10 @@ async def process_jrys_request(context: BotContext, args: list, user_id: str, gr
         await builder.send()
         
         # 尝试撤回处理中提示消息
-        await try_recall_processing_message(context, processing_message_id)
+        await try_recall_processing_message(context, processing_message_id, account_id)
         
     except Exception as e:
-        logger.error(f"查询今日运势失败: {e}")
+        logger.error(f"查询今日运势失败：{e}")
         error_builder = MessageBuilder(context)
         error_builder.set_group_id(group_id)
         error_builder.set_user_id(user_id)
@@ -419,20 +422,20 @@ async def process_jrys_request(context: BotContext, args: list, user_id: str, gr
         await error_builder.send()
         
         # 尝试撤回处理中提示消息
-        await try_recall_processing_message(context, processing_message_id)
+        await try_recall_processing_message(context, processing_message_id, account_id)
 
-async def try_recall_processing_message(context: BotContext, processing_message_id: str) -> None:
+async def try_recall_processing_message(context: BotContext, processing_message_id: str, account_id: int = None) -> None:
     """尝试撤回处理中提示消息"""
     try:
         # 等待一段时间确保消息发送完成
         await asyncio.sleep(1)
         
-        # 调用API撤回消息
-        from utils.api_utils import call_onebot_api
+        # 调用 API 撤回消息
         result = await call_onebot_api(
             context=context,
             action="delete_msg",
-            params={"message_id": processing_message_id}
+            params={"message_id": processing_message_id},
+            account_id=account_id
         )
         
         if not (result and result.get("success")):

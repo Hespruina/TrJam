@@ -17,20 +17,23 @@ logger = get_logger("PokeCommand")
 poke_cooldowns = {}
 
 async def handle_poke_command(context: BotContext, args: list, user_id: str, group_id: str, **kwargs) -> CommandResponse:
-    """处理 '/poke' 命令，戳指定QQ号用户。"""
+    """处理 '/poke' 命令，戳指定 QQ 号用户。"""
     try:
-        # 解析参数中的QQ号或@
+        # 获取账号 ID（parallel 模式下使用）
+        account_id = kwargs.get('account_id')
+        
+        # 解析参数中的 QQ 号或@
         target_qq, remaining_args = parse_at_or_qq(args)
         if not target_qq:
             builder = MessageBuilder(context)
             builder.set_group_id(group_id)
             builder.set_user_id(user_id)
             builder.add_at()
-            builder.add_text("❌ 请指定要戳的用户QQ号或@对方")
+            builder.add_text("❌ 请指定要戳的用户 QQ 号或@对方")
             await builder.send()
             return CommandResponse.none()
         
-        # 获取机器人自身的QQ号
+        # 获取机器人自身的 QQ 号
         bot_qq = str(context.get_config_value('bot_qq', ''))
         # 检查是否戳的是机器人自己
         if str(target_qq) == bot_qq:
@@ -45,11 +48,11 @@ async def handle_poke_command(context: BotContext, args: list, user_id: str, gro
         # 检查权限级别
         user_level = check_permission(context, user_id, group_id)
         
-        # 检查冷却时间（20秒）
+        # 检查冷却时间（20 秒）
         current_time = time.time()
-        if user_level < 2:  # 只有Root用户没有冷却时间
+        if user_level < 2:  # 只有 Root 用户没有冷却时间
             last_time = poke_cooldowns.get(user_id, 0)
-            cooldown_time = 20  # 20秒冷却时间
+            cooldown_time = 20  # 20 秒冷却时间
             if current_time - last_time < cooldown_time:
                 remaining_time = int(cooldown_time - (current_time - last_time))
                 builder = MessageBuilder(context)
@@ -61,17 +64,17 @@ async def handle_poke_command(context: BotContext, args: list, user_id: str, gro
                 return CommandResponse.none()
         
         # 解析戳戳次数
-        times = 1  # 默认戳1次
+        times = 1  # 默认戳 1 次
         if remaining_args and remaining_args[0].isdigit():
             times = int(remaining_args[0])
             # 检查次数限制
-            if user_level < 2:  # 非Root用户限制5次
+            if user_level < 2:  # 非 Root 用户限制 5 次
                 if times > 5:
                     builder = MessageBuilder(context)
                     builder.set_group_id(group_id)
                     builder.set_user_id(user_id)
                     builder.add_at()
-                    builder.add_text("⚠️ 最多只能戳5下哦~")
+                    builder.add_text("⚠️ 最多只能戳 5 下哦~")
                     await builder.send()
                     return CommandResponse.none()
             elif times <= 0:
@@ -79,27 +82,27 @@ async def handle_poke_command(context: BotContext, args: list, user_id: str, gro
                 builder.set_group_id(group_id)
                 builder.set_user_id(user_id)
                 builder.add_at()
-                builder.add_text("❌ 戳戳次数必须大于0！")
+                builder.add_text("❌ 戳戳次数必须大于 0！")
                 await builder.send()
                 return CommandResponse.none()
         
-        logger.info(f"用户 {user_id} 在群 {group_id} 执行了 poke 命令，目标QQ: {target_qq}，次数: {times}")
+        logger.info(f"用户 {user_id} 在群 {group_id} 执行了 poke 命令，目标 QQ: {target_qq}，次数：{times}")
         
-        # 更新冷却时间（非Root用户）
+        # 更新冷却时间（非 Root 用户）
         if user_level < 2:
             poke_cooldowns[user_id] = time.time()
         
         # 创建后台任务处理耗时的戳戳操作
         create_monitored_task(
-            process_poke_request(context, user_id, group_id, target_qq, times),
+            process_poke_request(context, user_id, group_id, target_qq, times, account_id),
             name=f"PokeCommand_process_{user_id}_{group_id}_{target_qq}"
         )
         
-        # 返回none表示已经通过builder发送了消息
+        # 返回 none 表示已经通过 builder 发送了消息
         return CommandResponse.none()
         
     except Exception as e:
-        logger.error(f"处理poke命令时发生异常: {e}", exc_info=True)
+        logger.error(f"处理 poke 命令时发生异常：{e}", exc_info=True)
         builder = MessageBuilder(context)
         builder.set_group_id(group_id)
         builder.set_user_id(user_id)
@@ -108,21 +111,22 @@ async def handle_poke_command(context: BotContext, args: list, user_id: str, gro
         await builder.send()
         return CommandResponse.none()
 
-async def process_poke_request(context: BotContext, user_id: str, group_id: str, target_qq: str, times: int):
+async def process_poke_request(context: BotContext, user_id: str, group_id: str, target_qq: str, times: int, account_id: int = None):
     """在后台处理戳戳请求的耗时操作"""
     try:
         # 使用call_onebot_api发送戳戳消息
         success_count = 0
         for i in range(times):
             try:
-                # 调用group_poke API
+                # 调用 group_poke API
                 response = await call_onebot_api(
                     context=context,
                     action="group_poke",
                     params={
                         "group_id": group_id,
                         "user_id": target_qq
-                    }
+                    },
+                    account_id=account_id
                 )
                 
                 # 检查API调用结果

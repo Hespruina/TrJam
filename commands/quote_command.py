@@ -137,7 +137,7 @@ QUOTE_AVAILABLE = True
 logger.info("Quote功能已内置加载")
 
 # 内部处理名言功能的函数
-async def handle_quote_internal(context: BotContext, user_id: str, group_id: str, raw_message: Union[str, List[Dict[str, Any]]], is_configured=True) -> bool:
+async def handle_quote_internal(context: BotContext, user_id: str, group_id: str, raw_message: Union[str, List[Dict[str, Any]]], is_configured=True, account_id: int = None) -> bool:
     """内部处理名言功能的函数"""
     # 检查群组是否在信任列表中 (信任检查已由命令分发器完成，此处无需重复检查)
     # 信任检查逻辑已移至命令分发器中，此处不再重复检查
@@ -171,7 +171,8 @@ async def handle_quote_internal(context: BotContext, user_id: str, group_id: str
 
     msg_data = await call_onebot_api(
         context, 'get_msg',
-        {'message_id': replied_message_id}
+        {'message_id': replied_message_id},
+        account_id=account_id
     )
     if not msg_data or not msg_data.get("success"):
         # 无法获取消息，直接返回错误信息
@@ -378,14 +379,15 @@ async def handle_quote_command(context: BotContext, args: list, user_id: str, gr
         builder.set_group_id(group_id)
         builder.set_user_id(user_id)
         builder.add_at()
-        builder.add_text(" 当前群未被信任，无法使用该功能。请联系ROOT用户了解如何信任本群。Root用户QQ：2711631445")
+        builder.add_text(" 当前群未被信任，无法使用该功能。请联系 ROOT 用户了解如何信任本群。Root 用户 QQ：2711631445")
         await builder.send()
         return None
     
     raw_message = kwargs.get('raw_message') or []
     is_configured = kwargs.get('is_configured', True)
+    account_id = kwargs.get('account_id')
     
-    # 发送处理中提示并保存消息ID
+    # 发送处理中提示并保存消息 ID
     processing_builder = MessageBuilder(context)
     processing_builder.set_group_id(group_id)
     processing_builder.set_user_id(user_id)
@@ -394,9 +396,9 @@ async def handle_quote_command(context: BotContext, args: list, user_id: str, gr
     
     async def processing_callback(message_id: str):
         if message_id:
-            # 启动后台任务处理名言生成，并传递处理中消息的ID
+            # 启动后台任务处理名言生成，并传递处理中消息的 ID 和账号 ID
             create_monitored_task(
-                process_quote_request(context, user_id, group_id, raw_message, is_configured, message_id),
+                process_quote_request(context, user_id, group_id, raw_message, is_configured, message_id, account_id),
                 name=f"QuoteCommand_process_{user_id}_{group_id}"
             )
     
@@ -408,36 +410,36 @@ async def handle_quote_command(context: BotContext, args: list, user_id: str, gr
     # 返回 None 表示已处理，避免重复发送消息
     return None
 
-async def process_quote_request(context: BotContext, user_id: str, group_id: str, raw_message: list, is_configured: bool, processing_message_id: str) -> None:
+async def process_quote_request(context: BotContext, user_id: str, group_id: str, raw_message: list, is_configured: bool, processing_message_id: str, account_id: int = None) -> None:
     """在后台处理名言请求"""
     try:
-        await handle_quote_internal(context, user_id, group_id, raw_message, is_configured)
+        await handle_quote_internal(context, user_id, group_id, raw_message, is_configured, account_id)
     except Exception as e:
-        logger.error(f"处理名言请求时发生异常: {e}", exc_info=True)
+        logger.error(f"处理名言请求时发生异常：{e}", exc_info=True)
         # 发送错误消息
         from utils.message_sender import MessageBuilder
         builder = MessageBuilder(context)
         builder.set_group_id(group_id)
         builder.set_user_id(user_id)
         builder.add_at()
-        builder.add_text(f" ❌ 生成名言图片时发生异常: {str(e)}")
+        builder.add_text(f" ❌ 生成名言图片时发生异常：{str(e)}")
         await builder.send()
     finally:
         # 撤回处理中提示消息
-        await try_recall_processing_message(context, processing_message_id)
+        await try_recall_processing_message(context, processing_message_id, account_id)
 
-async def try_recall_processing_message(context: BotContext, processing_message_id: str) -> None:
+async def try_recall_processing_message(context: BotContext, processing_message_id: str, account_id: int = None) -> None:
     """尝试撤回处理中提示消息"""
     try:
         # 等待一段时间确保消息发送完成
         await asyncio.sleep(1)
         
-        # 调用API撤回消息
-        from utils.api_utils import call_onebot_api
+        # 调用 API 撤回消息
         result = await call_onebot_api(
             context=context,
             action="delete_msg",
-            params={"message_id": processing_message_id}
+            params={"message_id": processing_message_id},
+            account_id=account_id
         )
         
         if not (result and result.get("success")):
@@ -445,8 +447,8 @@ async def try_recall_processing_message(context: BotContext, processing_message_
     except Exception as e:
         logger.warning(f"撤回处理中提示消息时发生异常: {e}")
 
-# 保留原来的handle_quote函数以兼容旧的调用方式，但简化其逻辑
+# 保留原来的 handle_quote 函数以兼容旧的调用方式，但简化其逻辑
 async def handle_quote(context: BotContext, ws, user_id: str, group_id: str, message: str, raw_message: str, is_configured=True) -> bool:
     """处理名言功能（兼容旧调用方式）"""
     # 由于现在通过命令注册机制处理，这里可以简化为直接调用内部函数
-    return await handle_quote_internal(context, user_id, group_id, raw_message, is_configured)
+    return await handle_quote_internal(context, user_id, group_id, raw_message, is_configured, account_id=None)
